@@ -4,56 +4,235 @@
 <head>
     <meta charset="utf-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Minetest for the Web</title>
     <style>
-        #start_screen {
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            background-color: #222;
             display: flex;
-            flex-direction: row;
-            align-items: start;
             justify-content: center;
+            align-items: center;
             height: 100vh;
             width: 100vw;
+            padding: 0;
+            margin: 0;
+            overflow: hidden;
         }
+
+        #start_screen {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(224, 240, 255, 0.1);
+            padding: 30px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            overflow-y: auto;
+            position: relative;
+        }
+        
+        #start_screen::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url('%__RELEASE_UUID__%/assets/minetest.webp');
+            background-size: cover;
+            background-position: center;
+            filter: blur(5px);
+            z-index: -2;
+        }
+        
+        #start_screen::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(224, 240, 255, 0.5);
+            z-index: -1;
+        }
+
         #start_screen_left {
-            flex-basis: 50%;
-            min-width: min(500px, 90vw);
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            padding: 20px;
+            overflow-y: auto;
+            border-radius: 15px;
+            backdrop-filter: blur(5px);
         }
+
         #start_screen_right {
-            flex-basis: 50%;
-            min-width: min(500px, 90vw);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            padding: 20px;
+            border-radius: 15px;
+            backdrop-filter: blur(5px);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        p {
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+
+        a {
+            color: #0066cc;
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        a:hover {
+            color: #004499;
+            text-decoration: underline;
+        }
+
+        .tribute {
+            margin-top: 20px;
+            font-style: italic;
+        }
+
+        #temporary_console {
+            background-color: #000;
+            color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            width: 100%;
+            height: 360px; /* 16:9 aspect ratio based on typical container width */
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            overflow-y: auto;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+
+        .form_row {
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        select, button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 10px;
+            border: 2px solid #ccc;
+            background-color: #fff;
+            font-size: 1rem;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        select:hover, button:hover {
+            border-color: #999;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        button {
+            background-color: #007BFF;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 20px;
+            height: 50px;
+            font-size: 1.2rem;
+        }
+
+        button:hover {
+            background-color: #0069d9;
+        }
+
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        /* Mobile responsiveness */
+        @media screen and (max-width: 768px) {
+            #start_screen {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto 1fr;
+                padding: 15px;
+            }
+
+            #start_screen_left {
+                padding: 10px;
+            }
+
+            #start_screen_right {
+                padding: 10px;
+            }
+
+            h1 {
+                font-size: 2rem;
+                margin-bottom: 15px;
+            }
+
+            #temporary_console {
+                height: 250px;
+            }
         }
     </style>
 </head>
 
-<body style="background-color: black">
+<body>
     <div id="start_screen">
         <div id="start_screen_left">
-            <h1>Minetest for the Web</h1>
-            <p>Some text about Minetest</p>
-            <p>More text about Minetest</p>
-            <p>Even more text about Minetest</p>
-            <p>And even more text about Minetest</p>
-            <p>And even more text about Minetest</p>
-            <p>And even more text about Minetest</p>
-            <p>And even more text about Minetest</p>
+            <h1>MINETEST x CG</h1>
+            
+            <p>Minetest is the most popular open source project similar to Minecraft. It has an active playerbase and can even be played in the browser.</p>
+            
+            <p>You can also connect to public servers and play with others. A lot of servers run mods that add mobs, items and other content to the game.</p>
+            
+            <p>Have fun, and enjoy the game!</p>
+            
+            <div class="tribute">
+                <p style="text-decoration: underline;">A Tribute to the creators</p>
+                
+                <p>Thanks to paradust7, who's minetest-wasm repository on github is the base of this.</p>
+                
+                <p>Thanks to the Luanti Team for maintaining the Minetest project (which is now named Luanti) on github.</p>
+            </div>
         </div>
         <div id="start_screen_right">
-            <div id="temporary_console" class="console" style="color: white"></div>
-            <div id="launch_form" class="console" style="color: white;">
-                <div id="launch_form_proxy">
-                    <b>Select Network Proxy:</b>
-                    <select id="select_proxy">
-                        <!-- filled by javascript -->
-                    </select>
-                </div>
-                <div id="launch_form_language">
-                    <b>Select language:</b>
+            <div id="temporary_console" class="console"></div>
+            
+            <div id="launch_form" class="console">
+                <div class="form_row">
+                    <label>Select language</label>
                     <select id="select_language">
                         <!-- filled by javascript -->
                     </select>
                 </div>
-                <div id="launch_form_button">
-                    <button id="launch_btn" style="width: 300px; height: 50px; font-size: 20pt;" disabled>Launch Minetest</button>
+                
+                <div class="form_row">
+                    <label>Select network proxy</label>
+                    <select id="select_proxy">
+                        <!-- filled by javascript -->
+                    </select>
+                </div>
+                
+                <div class="form_row">
+                    <button id="launch_btn" disabled>Play</button>
                 </div>
             </div>
         </div>
@@ -66,6 +245,15 @@
             mtl.setConf('viewing_range', 85);
             mtl.setConf('max_block_send_distance', 5);
             mtl.setConf('max_block_generate_distance', 5);
+        }
+
+        // Reduce memory and network usage
+        function higherSettings(mtl) {
+            mtl.setConf('viewing_range', 200);
+            mtl.setConf('max_block_send_distance', 20);
+            mtl.setConf('max_block_generate_distance', 20);
+            mtl.setConf('block_send_optimize_distance', 20);
+            mtl.setConf('client_mapblock_limit', 10000);
         }
 
         const startScreen = document.getElementById('start_screen');
@@ -83,6 +271,9 @@
             const p = document.createElement('pre');
             p.innerText = prefix + line;
             tcon.appendChild(p);
+            
+            // Auto-scroll to the bottom
+            tcon.scrollTop = tcon.scrollHeight;
         }
 
         function wipePage() {
@@ -115,72 +306,16 @@
                 select_language.appendChild(opt);
             });
             select_language.value = getDefaultLanguage();
-
             
             launchBtn.addEventListener('click', () => {
                 const proxyIndex = document.getElementById('select_proxy').value;
                 const proxy = proxies[proxyIndex][0];
                 wipePage();
+                higherSettings(mtl);
                 mtl.setProxy(proxy);
                 mtl.setLang(select_language.value);
                 mtl.launch(args);
             });
-
-            // const launchServer = document.getElementById('launch_server');
-            // launchServer.addEventListener('click', async () => {
-            //     const proxyIndex = document.getElementById('select_proxy').value;
-            //     const username = document.getElementById('multiplayer_username').value;
-            //     const game = document.getElementById('multiplayer_game').value;
-            //     if (username.length == 0) {
-            //         alert("Empty username");
-            //         return;
-            //     }
-            //     wipePage();
-
-            //     const proxy = proxies[proxyIndex][0];
-            //     mtl.setProxy(proxy);
-            //     mtl.addPack(game);
-            //     const [cmd, serverCode, clientCode] = await queryProxy(`MAKEVPN ${game}`, proxy);
-            //     if (cmd != 'NEWVPN') {
-            //         alert("Invalid response from proxy");
-            //         return;
-            //     }
-            //     const args = new MinetestArgs();
-            //     args.extra.push('--withserver');
-            //     args.gameid = game;
-            //     args.name = username;
-            //     args.address = '127.0.0.1';
-            //     args.port = 30000;
-            //     args.go = true;
-            //     history.pushState({}, "", `?proxy=${proxyIndex}&game=${game}&join=${clientCode}`);
-            //     mtl.setVPN(serverCode, clientCode);
-            //     enableMemorySaving(mtl);
-            //     mtl.setLang(select_language.value);
-            //     mtl.launch(args);
-            // });
-
-            // const joinLaunch = document.getElementById('join_launch');
-            // joinLaunch.addEventListener('click', async () => {
-            //     const username = document.getElementById('join_username').value;
-            //     if (username.length == 0) {
-            //         alert("Empty username");
-            //         return;
-            //     }
-            //     wipePage();
-            //     mtl.setProxy(proxies[join_proxy][0]);
-            //     mtl.addPack(join_game);
-
-            //     const args = new MinetestArgs();
-            //     args.gameid = join_game;
-            //     args.name = username;
-            //     args.address = '172.16.0.1';
-            //     args.port = 30000;
-            //     args.go = true;
-            //     mtl.setVPN(null, join_code);
-            //     enableMemorySaving(mtl);
-            //     mtl.setLang(select_language.value);
-            //     mtl.launch(args);
-            // });
         }
 
         function queryProxy(cmd, proxy) {
