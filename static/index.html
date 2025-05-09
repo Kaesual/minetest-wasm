@@ -223,6 +223,12 @@
 
             <p>This plugin is work in progress, more cool features are coming soon!</p>
             
+            <p>Known issues:</p>
+            <ul style="margin-left: 20px; list-style-type: disc;">
+                <li>The view distance is very limited in Chrome Browsers (much better in Firefox)</li>
+                <li>If you're spinning very fast when capturing the mouse, try to play in fullscreen mode instead. Just click the fullscreen icon in the community sidebar.</li>
+            </ul>
+            
             <div class="tribute">
                 <p style="text-decoration: underline;">A Tribute to the creators</p>
                 
@@ -269,11 +275,11 @@
 
         // Reduce memory and network usage
         function higherSettings(mtl) {
-            mtl.setConf('viewing_range', 200);
-            mtl.setConf('max_block_send_distance', 20);
-            mtl.setConf('max_block_generate_distance', 20);
-            mtl.setConf('block_send_optimize_distance', 20);
-            mtl.setConf('client_mapblock_limit', 10000);
+            mtl.setConf('viewing_range', 140);
+            mtl.setConf('max_block_send_distance', 10);
+            mtl.setConf('max_block_generate_distance', 10);
+            mtl.setConf('block_send_optimize_distance', 10);
+            mtl.setConf('client_mapblock_limit', 8000);
         }
 
         const startScreen = document.getElementById('start_screen');
