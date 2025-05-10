@@ -1,5 +1,3 @@
 #!/bin/bash -eux
 docker build -t minetest_builder:latest .
-rm -rf ./www
-mkdir -p ./www
-docker run --rm -u $(id -u) -v ./www:/www:rw minetest_builder:latest cp -a /home/builder/minetest-wasm/www/. /www/
+echo "cd /minetest-wasm && ./install_emsdk.sh && ./build_all.sh" | docker run --rm -i -u $(id -u):$(id -g) -v .:/minetest-wasm:rw minetest_builder:latest bash
