@@ -3,6 +3,7 @@
 // These are relative paths
 const RELEASE_DIR = '%__RELEASE_UUID__%'; // set by build_www.sh
 const DEFAULT_PACKS_DIR = RELEASE_DIR + '/packs';
+const SAVE_DIR = '/savedata'; // Directory for persistent storage
 
 const rtCSS = `
 body {
@@ -163,7 +164,8 @@ class LaunchScheduler {
     }
 
     isSet(name) {
-        return this.conditions.get(name)[0];
+        const conditionEntry = this.conditions.get(name);
+        return conditionEntry ? conditionEntry[0] : false; // If not added, it's not set
     }
 
     addCondition(name, startCallback = null, deps = []) {
@@ -174,16 +176,24 @@ class LaunchScheduler {
     }
 
     addDep(name, depname) {
-        if (!this.isSet(depname)) {
-            this.conditions.get(name)[1].add(depname);
+        const conditionEntry = this.conditions.get(name);
+        if (!conditionEntry) {
+            throw new Error(`LaunchScheduler.addDep: condition '${name}' not found.`);
+        }
+        if (!this.isSet(depname)) { // isSet is now safe
+            conditionEntry[1].add(depname);
         }
     }
 
     setCondition(name) {
-        if (this.isSet(name)) {
-            throw new Error('Scheduler condition set twice');
+        const conditionEntry = this.conditions.get(name);
+        if (!conditionEntry) {
+            throw new Error(`LaunchScheduler.setCondition called for un-added condition: ${name}. Please use addCondition first.`);
         }
-        this.conditions.get(name)[0] = true;
+        if (conditionEntry[0]) { // conditionEntry[0] is the 'isSet' status
+            throw new Error(`Scheduler condition '${name}' set twice`);
+        }
+        conditionEntry[0] = true; // Set the status
         this.conditions.forEach(v => {
             v[1].delete(name);
         });
@@ -191,13 +201,16 @@ class LaunchScheduler {
     }
 
     clearCondition(name, newCallback = null, deps = []) {
-        if (!this.isSet(name)) {
-            throw new Error('clearCondition called on unset condition');
+        const conditionEntry = this.conditions.get(name);
+        if (!conditionEntry) {
+            throw new Error(`LaunchScheduler.clearCondition called for un-added condition: ${name}.`);
         }
-        const arr = this.conditions.get(name);
-        arr[0] = false;
-        arr[1] = new Set(deps);
-        arr[2] = newCallback;
+        if (!conditionEntry[0]) { // Check isSet status
+            throw new Error(`clearCondition called on unset condition: '${name}'`);
+        }
+        conditionEntry[0] = false;
+        conditionEntry[1] = new Set(deps);
+        conditionEntry[2] = newCallback;
     }
 
     invokeCallbacks() {
@@ -212,6 +225,36 @@ class LaunchScheduler {
     }
 }
 const mtScheduler = new LaunchScheduler();
+
+function initializePersistentFS() {
+    console.log('initializePersistentFS: Attempting to mount IDBFS at ' + SAVE_DIR);
+    try {
+        // Check for Module.FS and the global IDBFS type
+        // Note: With WasmFS, FS operations might be available directly via global FS object
+        // or through Module.FS after full initialization.
+        let fsObject = Module.FS; // Prefer Module.FS if available
+        if (typeof FS !== 'undefined' && FS.mkdirTree && FS.mount) { // Check global FS as a fallback or primary for WasmFS
+             if (!fsObject) fsObject = FS;
+        }
+
+        if (fsObject && fsObject.mkdirTree && fsObject.mount && typeof IDBFS !== 'undefined') {
+            fsObject.mkdirTree(SAVE_DIR + '/worlds');
+            fsObject.mount(IDBFS, {}, SAVE_DIR); // Use the global IDBFS type for mounting
+            console.log('initializePersistentFS: IDBFS mounted successfully at ' + SAVE_DIR);
+            if (mtScheduler) {
+                mtScheduler.setCondition("idbfs_mounted");
+            } else {
+                console.error("initializePersistentFS: mtScheduler not found to set idbfs_mounted condition.");
+            }
+        } else {
+            console.error('initializePersistentFS: Module.FS/global FS or global IDBFS type not available for mounting.');
+            if (!fsObject || !fsObject.mkdirTree || !fsObject.mount) console.error('initializePersistentFS: FS object or its methods (mkdirTree, mount) are undefined.', fsObject);
+            if (typeof IDBFS === 'undefined') console.error('initializePersistentFS: global IDBFS is undefined.');
+        }
+    } catch (e) {
+        console.error('initializePersistentFS: Error mounting IDBFS:', e);
+    }
+}
 
 function loadWasm() {
     // Start loading the wasm module
@@ -263,6 +306,9 @@ function emloop_ready() {
     emsocket_set_proxy = cwrap("emsocket_set_proxy", null, ["number"]);
     emsocket_set_vpn = cwrap("emsocket_set_vpn", null, ["number"]);
     mtScheduler.setCondition("wasmReady");
+
+    // Initialize persistent FS once emscripten runtime is ready
+    initializePersistentFS(); 
 }
 
 // Called when the wasm module wants to force redraw before next frame
@@ -317,7 +363,7 @@ function consolePrint(text) {
 }
 
 var Module = {
-    preRun: [],
+    preRun: [], // Remove FS setup from here
     postRun: [],
     print: consolePrint,
     canvas: (function() {
@@ -583,6 +629,32 @@ class MinetestLauncher {
         mtScheduler.addCondition("ready", this.#notifyReady.bind(this), ['wasmReady']);
         mtScheduler.addCondition("main_called", callMain, ['ready', 'launch_called']);
         this.addPack('base');
+
+        // Add conditions related to IDBFS persistence
+        mtScheduler.addCondition("idbfs_mounted"); // Will be set by Module.preRun
+        mtScheduler.addCondition("idbfs_synced_done"); // Will be set by the idbfs_synced callback
+
+        // Initial sync from IndexedDB to virtual FS. Depends on IDBFS being mounted.
+        mtScheduler.addCondition("idbfs_synced", () => {
+            if (Module && Module.FS && Module.FS.syncfs) {
+                console.log('Performing initial FS.syncfs(true) to load from IndexedDB...');
+                Module.FS.syncfs(true, err => {
+                    if (err) {
+                        console.error('Error during initial FS.syncfs(true):', err);
+                    } else {
+                        console.log('Initial FS.syncfs(true) completed.');
+                    }
+                    // Proceed with launch related setup only after sync is done
+                    mtScheduler.setCondition("idbfs_synced_done");
+                });
+            } else {
+                 console.warn('Module.FS.syncfs not available for initial sync (Module, FS, or syncfs method missing).');
+                 mtScheduler.setCondition("idbfs_synced_done"); // still set condition if syncfs not available to not block launch
+            }
+        }, ["idbfs_mounted"]); // Depends on successful mount signaled by "idbfs_mounted"
+
+        // Make main_called dependent on the initial sync
+        mtScheduler.addDep("main_called", "idbfs_synced_done");
     }
 
     setProxy(url) {
@@ -751,6 +823,11 @@ class MinetestLauncher {
         this.addPacks(this.args.packs);
         activateBody();
         fixGeometry();
+
+        // Configure Minetest to save worlds in the persistent directory
+        this.setConf('worlds_path', SAVE_DIR + '/worlds');
+        console.log(`Set worlds_path to: ${SAVE_DIR + '/worlds'}`);
+
         if (this.minetestConf.size > 0) {
             const contents = this.#renderMinetestConf();
             console.log("minetest.conf is: ", contents);
@@ -885,3 +962,39 @@ function getDefaultLanguage() {
 
     return 'en';
 }
+
+// Persist FS to IndexedDB on page close
+window.addEventListener('beforeunload', (event) => {
+    if (Module && Module.FS && Module.FS.syncfs) {
+        console.log('Performing FS.syncfs(false) on beforeunload...');
+        try {
+            Module.FS.syncfs(false, err => {
+                if (err) {
+                    console.error('Error during FS.syncfs(false) on beforeunload:', err);
+                } else {
+                    console.log('FS.syncfs(false) on beforeunload completed.');
+                }
+            });
+            // Forcing sync, Emscripten docs mention this might be needed for beforeunload
+            // However, this is a synchronous operation and might be blocked by browsers.
+            // The async version above is preferred if it works.
+            // For critical saves, it's better to save explicitly from C++ and then sync.
+        } catch (e) {
+            console.error('Exception during FS.syncfs(false) on beforeunload:', e);
+        }
+    }
+});
+
+// Optional: Periodic sync
+// setInterval(() => {
+// if (Module && Module.FS && Module.FS.syncfs && mtScheduler.isSet("main_called")) {
+// console.log('Performing periodic FS.syncfs(false)...');
+// Module.FS.syncfs(false, err => {
+// if (err) {
+// console.error('Error during periodic FS.syncfs(false):', err);
+//        } else {
+// console.log('Periodic FS.syncfs(false) completed.');
+//        }
+//    });
+//    }
+// }, 60000); // Every 60 seconds
