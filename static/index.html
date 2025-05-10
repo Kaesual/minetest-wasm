@@ -225,7 +225,6 @@
             
             <p>Known issues:</p>
             <ul style="margin-left: 20px; list-style-type: disc;">
-                <li>The view distance is very limited in Chrome Browsers (much better in Firefox)</li>
                 <li>If you're spinning very fast when capturing the mouse, try to play in fullscreen mode instead. Just click the fullscreen icon in the community sidebar.</li>
             </ul>
             
@@ -285,6 +284,31 @@
         const startScreen = document.getElementById('start_screen');
         const launchBtn = document.getElementById('launch_btn');
         const tcon = document.getElementById('temporary_console');
+
+        const select_proxy = document.getElementById('select_proxy');
+        const proxies = [
+            ["wss://na1.dustlabs.io/mtproxy", "North America"],
+            ["wss://sa1.dustlabs.io/mtproxy", "South America"],
+            ["wss://eu1.dustlabs.io/mtproxy", "Europe"],
+            ["wss://ap1.dustlabs.io/mtproxy", "Asia"],
+            ["wss://ap2.dustlabs.io/mtproxy", "Australia"],
+        ];
+        proxies.forEach((entry, index) => {
+            const opt = document.createElement('option');
+            opt.value = index;
+            opt.innerText = entry[1];
+            select_proxy.appendChild(opt);
+        });
+
+        const select_language = document.getElementById('select_language');
+        SUPPORTED_LANGUAGES.forEach(entry => {
+            const opt = document.createElement('option');
+            opt.value = entry[0];
+            opt.innerText = entry[1];
+            select_language.appendChild(opt);
+        });
+        select_language.value = getDefaultLanguage();
+
         function tcon_print(prefix, line) {
             if (prefix) {
                 for (child of tcon.childNodes) {
@@ -308,30 +332,6 @@
 
         function enableLaunchButton() {
             launchBtn.disabled = false;
-
-            const select_proxy = document.getElementById('select_proxy');
-            const proxies = [
-                ["wss://na1.dustlabs.io/mtproxy", "North America"],
-                ["wss://sa1.dustlabs.io/mtproxy", "South America"],
-                ["wss://eu1.dustlabs.io/mtproxy", "Europe"],
-                ["wss://ap1.dustlabs.io/mtproxy", "Asia"],
-                ["wss://ap2.dustlabs.io/mtproxy", "Australia"],
-            ];
-            proxies.forEach((entry, index) => {
-                const opt = document.createElement('option');
-                opt.value = index;
-                opt.innerText = entry[1];
-                select_proxy.appendChild(opt);
-            });
-
-            const select_language = document.getElementById('select_language');
-            SUPPORTED_LANGUAGES.forEach(entry => {
-                const opt = document.createElement('option');
-                opt.value = entry[0];
-                opt.innerText = entry[1];
-                select_language.appendChild(opt);
-            });
-            select_language.value = getDefaultLanguage();
             
             launchBtn.addEventListener('click', () => {
                 const proxyIndex = document.getElementById('select_proxy').value;

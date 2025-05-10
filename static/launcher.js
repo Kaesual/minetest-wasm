@@ -3,7 +3,8 @@
 // These are relative paths
 const RELEASE_DIR = '%__RELEASE_UUID__%'; // set by build_www.sh
 const DEFAULT_PACKS_DIR = RELEASE_DIR + '/packs';
-const SAVE_DIR = '/savedata'; // Directory for persistent storage
+
+const WORLDS_DIR = '/minetest'; // Minetest worlds are found here
 
 const rtCSS = `
 body {
@@ -164,8 +165,7 @@ class LaunchScheduler {
     }
 
     isSet(name) {
-        const conditionEntry = this.conditions.get(name);
-        return conditionEntry ? conditionEntry[0] : false; // If not added, it's not set
+        return this.conditions.get(name)[0];
     }
 
     addCondition(name, startCallback = null, deps = []) {
@@ -176,24 +176,16 @@ class LaunchScheduler {
     }
 
     addDep(name, depname) {
-        const conditionEntry = this.conditions.get(name);
-        if (!conditionEntry) {
-            throw new Error(`LaunchScheduler.addDep: condition '${name}' not found.`);
-        }
-        if (!this.isSet(depname)) { // isSet is now safe
-            conditionEntry[1].add(depname);
+        if (!this.isSet(depname)) {
+            this.conditions.get(name)[1].add(depname);
         }
     }
 
     setCondition(name) {
-        const conditionEntry = this.conditions.get(name);
-        if (!conditionEntry) {
-            throw new Error(`LaunchScheduler.setCondition called for un-added condition: ${name}. Please use addCondition first.`);
+        if (this.isSet(name)) {
+            throw new Error('Scheduler condition set twice');
         }
-        if (conditionEntry[0]) { // conditionEntry[0] is the 'isSet' status
-            throw new Error(`Scheduler condition '${name}' set twice`);
-        }
-        conditionEntry[0] = true; // Set the status
+        this.conditions.get(name)[0] = true;
         this.conditions.forEach(v => {
             v[1].delete(name);
         });
@@ -201,16 +193,13 @@ class LaunchScheduler {
     }
 
     clearCondition(name, newCallback = null, deps = []) {
-        const conditionEntry = this.conditions.get(name);
-        if (!conditionEntry) {
-            throw new Error(`LaunchScheduler.clearCondition called for un-added condition: ${name}.`);
+        if (!this.isSet(name)) {
+            throw new Error('clearCondition called on unset condition');
         }
-        if (!conditionEntry[0]) { // Check isSet status
-            throw new Error(`clearCondition called on unset condition: '${name}'`);
-        }
-        conditionEntry[0] = false;
-        conditionEntry[1] = new Set(deps);
-        conditionEntry[2] = newCallback;
+        const arr = this.conditions.get(name);
+        arr[0] = false;
+        arr[1] = new Set(deps);
+        arr[2] = newCallback;
     }
 
     invokeCallbacks() {
@@ -226,34 +215,182 @@ class LaunchScheduler {
 }
 const mtScheduler = new LaunchScheduler();
 
-function initializePersistentFS() {
-    console.log('initializePersistentFS: Attempting to mount IDBFS at ' + SAVE_DIR);
-    try {
-        // Check for Module.FS and the global IDBFS type
-        // Note: With WasmFS, FS operations might be available directly via global FS object
-        // or through Module.FS after full initialization.
-        let fsObject = Module.FS; // Prefer Module.FS if available
-        if (typeof FS !== 'undefined' && FS.mkdirTree && FS.mount) { // Check global FS as a fallback or primary for WasmFS
-             if (!fsObject) fsObject = FS;
-        }
+// --- START WasmFS Persistence Logic ---
+let persistenceInitialized = false;
+let idbManager = null; // Will be instance of IDBManager
+let lastKnownMtimes = new Map(); // path -> mtime (timestamp)
+const WORLDS_SYNC_BASE_PATH = '/minetest/worlds'; // Only sync this subtree
 
-        if (fsObject && fsObject.mkdirTree && fsObject.mount && typeof IDBFS !== 'undefined') {
-            fsObject.mkdirTree(SAVE_DIR + '/worlds');
-            fsObject.mount(IDBFS, {}, SAVE_DIR); // Use the global IDBFS type for mounting
-            console.log('initializePersistentFS: IDBFS mounted successfully at ' + SAVE_DIR);
-            if (mtScheduler) {
-                mtScheduler.setCondition("idbfs_mounted");
-            } else {
-                console.error("initializePersistentFS: mtScheduler not found to set idbfs_mounted condition.");
+async function initialLoadFromIDB() {
+    if (!Module.FS || !idbManager) {
+        console.error('initialLoadFromIDB: Module.FS or IDBManager not available.');
+        return Promise.reject('FS or IDBManager not ready');
+    }
+    console.log('WasmFS_IDB: Starting initial load from IndexedDB for path: ' + WORLDS_SYNC_BASE_PATH);
+    try {
+        const files = await idbManager.getAllFiles(WORLDS_SYNC_BASE_PATH);
+        if (files.length === 0) {
+            console.log('WasmFS_IDB: No files found in IndexedDB under ' + WORLDS_SYNC_BASE_PATH + ' to preload.');
+            return;
+        }
+        console.log(`WasmFS_IDB: Found ${files.length} file(s) in IndexedDB under ${WORLDS_SYNC_BASE_PATH} to load into WasmFS.`);
+
+        for (const file of files) {
+            try {
+                // Ensure directory exists in WasmFS
+                const dir = file.path.substring(0, file.path.lastIndexOf('/'));
+                if (dir && !Module.FS.analyzePath(dir).exists) {
+                    Module.FS.mkdirTree(dir);
+                    // console.log('WasmFS_IDB: Created directory in WasmFS: ' + dir);
+                }
+                Module.FS.writeFile(file.path, file.content); // content is Uint8Array
+                lastKnownMtimes.set(file.path, file.mtime.getTime()); // Store original mtime
+                // console.log('WasmFS_IDB: Loaded file from IDB to WasmFS: ' + file.path);
+
+                // Optionally, try to set mtime/atime if FS.utime is available and works
+                // This is often not fully supported or might not behave as expected.
+                // if (Module.FS.utime) {
+                //     try {
+                //         Module.FS.utime(file.path, file.atime.getTime(), file.mtime.getTime());
+                //     } catch (e) {
+                //         console.warn('WasmFS_IDB: Could not set mtime/atime for ', file.path, e);
+                //     }
+                // }
+            } catch (e) {
+                console.error('WasmFS_IDB: Error writing file to WasmFS:', file.path, e);
+            }
+        }
+        console.log('WasmFS_IDB: Finished loading files from IndexedDB into WasmFS.');
+    } catch (e) {
+        console.error('WasmFS_IDB: Error during initial load from IndexedDB:', e);
+        throw e; // Re-throw to be caught by initializePersistentFS
+    }
+}
+
+async function initializePersistentFS(callback) {
+    console.log('WasmFS_IDB: Attempting to initialize persistent storage using IndexedDB.');
+    
+    if (!idbManager) {
+        idbManager = new IDBManager(); // Assuming IDBManager is globally available via idb.js
+    }
+
+    try {
+        await idbManager.initDB();
+        console.log('WasmFS_IDB: IndexedDB initialized.');
+
+        // Ensure base WORLDS_DIR and WORLDS_DIR + '/worlds' exist in WasmFS (Minetest might create these anyway)
+        // This is more for sanity checking and ensuring our sync logic has a base to scan.
+        if (Module && Module.FS) {
+            if (!Module.FS.analyzePath(WORLDS_DIR).exists) {
+                Module.FS.mkdirTree(WORLDS_DIR);
+                console.log('WasmFS_IDB: Created base directory in WasmFS: ' + WORLDS_DIR);
+            }
+            const fullWorldsPath = WORLDS_DIR + '/worlds'; // This is WORLDS_SYNC_BASE_PATH
+            if (!Module.FS.analyzePath(fullWorldsPath).exists) {
+                Module.FS.mkdirTree(fullWorldsPath);
+                console.log('WasmFS_IDB: Created worlds subdirectory in WasmFS: ' + fullWorldsPath);
             }
         } else {
-            console.error('initializePersistentFS: Module.FS/global FS or global IDBFS type not available for mounting.');
-            if (!fsObject || !fsObject.mkdirTree || !fsObject.mount) console.error('initializePersistentFS: FS object or its methods (mkdirTree, mount) are undefined.', fsObject);
-            if (typeof IDBFS === 'undefined') console.error('initializePersistentFS: global IDBFS is undefined.');
+            console.error('WasmFS_IDB: Module.FS not available for directory pre-creation.');
+            // Continue, as initialLoadFromIDB will also check Module.FS
+        }
+
+        await initialLoadFromIDB(); // Load data from IDB into WasmFS
+
+        persistenceInitialized = true;
+        console.log('WasmFS_IDB: Initial persistence setup complete. Files loaded from IDB to WasmFS.');
+        if (callback) callback(null);
+
+    } catch (e) {
+        console.error('WasmFS_IDB: Error during IndexedDB persistence setup: ', e);
+        persistenceInitialized = false; 
+        if (callback) callback(e);
+    }
+}
+
+async function persistFS() {
+    if (!persistenceInitialized || !Module.FS || !idbManager) {
+        // console.warn('WasmFS_IDB: Cannot persist, not initialized or FS/IDBManager not available.');
+        return;
+    }
+
+    // console.log('WasmFS_IDB: Starting periodic sync from WasmFS to IndexedDB for path: ' + WORLDS_SYNC_BASE_PATH);
+    let filesProcessed = 0;
+    let filesSynced = 0;
+
+    async function scanDirectory(currentPath) {
+        let entries;
+        try {
+            entries = Module.FS.readdir(currentPath);
+        } catch (e) {
+            // If readdir fails, it might be a file, or an inaccessible directory/error.
+            // We rely on the fact that `currentPath` itself was listed by a parent readdir call,
+            // or is the initial WORLDS_SYNC_BASE_PATH.
+            // If it is the base path and readdir fails, something is very wrong.
+            if (currentPath === WORLDS_SYNC_BASE_PATH && e.message.includes('No such file or directory')) {
+                 console.warn('WasmFS_IDB: WORLDS_SYNC_BASE_PATH does not exist in WasmFS, skipping scan: ' + currentPath, e);
+                 return; // Nothing to scan if base path is gone
+            }
+            // Assume it's a file if readdir fails for a path we know should exist (from parent scan)
+            // and the error isn't about the base path itself missing.
+            // We will try to stat it as a file.
+            try {
+                const stat = Module.FS.stat(currentPath);
+                // If stat succeeds, and readdir failed, it strongly implies it's a file.
+                filesProcessed++;
+                const currentMtimeMs = stat.mtime * 1000; // Convert seconds to milliseconds
+                const knownMtimeMs = lastKnownMtimes.get(currentPath); // Already in ms
+
+                if (currentMtimeMs !== knownMtimeMs) {
+                    // console.log(`WasmFS_IDB: File changed (or new): ${currentPath}, mtime: ${new Date(currentMtimeMs)} (known: ${knownMtimeMs ? new Date(knownMtimeMs) : 'N/A'})`);
+                    const content = Module.FS.readFile(currentPath, { encoding: 'binary' });
+                    // Pass mtime & atime in milliseconds to IDBManager
+                    await idbManager.saveFile(currentPath, content, stat.mtime * 1000, stat.atime * 1000);
+                    lastKnownMtimes.set(currentPath, currentMtimeMs);
+                    filesSynced++;
+                }
+                return; // It was a file, processed.
+            } catch (statError) {
+                // If both readdir and stat fail for an entry known from parent, log and skip.
+                console.error('WasmFS_IDB: Error stating WasmFS entry (and readdir failed, so not a typical dir): ', currentPath, 'readdir error:', e, 'stat error:', statError);
+                return;
+            }
+        }
+
+        // If readdir succeeded, it's a directory.
+        for (const entry of entries) {
+            if (entry === '.' || entry === '..') continue;
+            const fullPath = currentPath + (currentPath.endsWith('/') ? '' : '/') + entry;
+            await scanDirectory(fullPath); // Recurse for sub-items (which could be files or dirs)
+        }
+    }
+
+    try {
+        await scanDirectory(WORLDS_SYNC_BASE_PATH);
+        if (filesSynced > 0) {
+            console.log(`WasmFS_IDB: Sync complete. Processed ${filesProcessed} WasmFS files, synced ${filesSynced} to IndexedDB.`);
         }
     } catch (e) {
-        console.error('initializePersistentFS: Error mounting IDBFS:', e);
+        console.error('WasmFS_IDB: Error during WasmFS to IndexedDB sync process:', e);
     }
+}
+
+// --- END WasmFS Persistence Logic ---
+
+function loadIDBScript(callback) {
+    const idbScript = document.createElement('script');
+    idbScript.src = RELEASE_DIR + "/idb.js"; // Assuming idb.js is in the same directory (static/)
+    idbScript.onload = () => {
+        console.log('idb.js loaded successfully.');
+        if (callback) callback();
+    };
+    idbScript.onerror = () => {
+        console.error('Failed to load idb.js!');
+        alert('Critical error: Could not load IndexedDB helper. Saves will not work.');
+        // Potentially block further execution or allow launch without persistence
+        if (callback) callback(new Error('Failed to load idb.js'));
+    };
+    document.head.appendChild(idbScript);
 }
 
 function loadWasm() {
@@ -305,10 +442,48 @@ function emloop_ready() {
     emsocket_init = cwrap("emsocket_init", null, []);
     emsocket_set_proxy = cwrap("emsocket_set_proxy", null, ["number"]);
     emsocket_set_vpn = cwrap("emsocket_set_vpn", null, ["number"]);
-    mtScheduler.setCondition("wasmReady");
 
-    // Initialize persistent FS once emscripten runtime is ready
-    initializePersistentFS(); 
+    console.log("emloop_ready called. Inspecting Module object:", Module);
+
+    loadIDBScript(() => {
+        // This callback is executed after idb.js is loaded (or fails to load)
+        if (typeof IDBManager === 'undefined') {
+            console.error("emloop_ready: IDBManager class not found even after idb.js attempted to load. Saves will not work.");
+            mtScheduler.isReady = true; // Allow launch but persistence is broken
+            alert("Critical error: IDBManager not available. Game saves will not work!");
+            mtScheduler.setCondition("wasmReady"); // Still set wasmReady, as the wasm module itself might be fine
+            return;
+        }
+
+        if (Module && Module.FS && typeof Module.FS.mkdir === 'function') {
+            console.log("emloop_ready: Module.FS and Module.FS.mkdir ARE available here.");
+            
+            initializePersistentFS(async (err) => { // Made async to use await inside
+                if (err) {
+                    console.error('WasmFS_IDB: Initial persistence setup failed. World saves might not be persistent.', err);
+                } else {
+                    console.log('WasmFS_IDB: Initial persistence setup appears complete.');
+                    // Start periodic sync only if initialization was successful
+                    setInterval(persistFS, 30000); // Sync every 30 seconds
+                    console.log('WasmFS_IDB: Periodic sync to IndexedDB started (every 30s).');
+                }
+                mtScheduler.isReady = true; 
+            });
+
+        } else {
+            console.error("emloop_ready: Module.FS or Module.FS.mkdir is STILL NOT available here.");
+            if (!Module) console.error("emloop_ready: Module object itself is not defined!");
+            else if (!Module.FS) console.error("emloop_ready: Module.FS is not defined on Module object.");
+            else if (typeof Module.FS.mkdir !== 'function') console.error("emloop_ready: Module.FS.mkdir is not a function.");
+            else if (typeof Module.FS.syncfs !== 'function') console.error("emloop_ready: Module.FS.syncfs is not a function (though likely not needed for WasmFS native backends).");
+            
+            // If FS isn't available, persistence definitely won't work.
+            // Allow launch but with a clear warning.
+            mtScheduler.isReady = true;
+            alert("Critical error: Emscripten FileSystem (Module.FS) is not available. Game saves will not work!");
+        }
+        mtScheduler.setCondition("wasmReady");
+    });
 }
 
 // Called when the wasm module wants to force redraw before next frame
@@ -363,7 +538,7 @@ function consolePrint(text) {
 }
 
 var Module = {
-    preRun: [], // Remove FS setup from here
+    preRun: [],
     postRun: [],
     print: consolePrint,
     canvas: (function() {
@@ -629,32 +804,6 @@ class MinetestLauncher {
         mtScheduler.addCondition("ready", this.#notifyReady.bind(this), ['wasmReady']);
         mtScheduler.addCondition("main_called", callMain, ['ready', 'launch_called']);
         this.addPack('base');
-
-        // Add conditions related to IDBFS persistence
-        mtScheduler.addCondition("idbfs_mounted"); // Will be set by Module.preRun
-        mtScheduler.addCondition("idbfs_synced_done"); // Will be set by the idbfs_synced callback
-
-        // Initial sync from IndexedDB to virtual FS. Depends on IDBFS being mounted.
-        mtScheduler.addCondition("idbfs_synced", () => {
-            if (Module && Module.FS && Module.FS.syncfs) {
-                console.log('Performing initial FS.syncfs(true) to load from IndexedDB...');
-                Module.FS.syncfs(true, err => {
-                    if (err) {
-                        console.error('Error during initial FS.syncfs(true):', err);
-                    } else {
-                        console.log('Initial FS.syncfs(true) completed.');
-                    }
-                    // Proceed with launch related setup only after sync is done
-                    mtScheduler.setCondition("idbfs_synced_done");
-                });
-            } else {
-                 console.warn('Module.FS.syncfs not available for initial sync (Module, FS, or syncfs method missing).');
-                 mtScheduler.setCondition("idbfs_synced_done"); // still set condition if syncfs not available to not block launch
-            }
-        }, ["idbfs_mounted"]); // Depends on successful mount signaled by "idbfs_mounted"
-
-        // Make main_called dependent on the initial sync
-        mtScheduler.addDep("main_called", "idbfs_synced_done");
     }
 
     setProxy(url) {
@@ -823,11 +972,6 @@ class MinetestLauncher {
         this.addPacks(this.args.packs);
         activateBody();
         fixGeometry();
-
-        // Configure Minetest to save worlds in the persistent directory
-        this.setConf('worlds_path', SAVE_DIR + '/worlds');
-        console.log(`Set worlds_path to: ${SAVE_DIR + '/worlds'}`);
-
         if (this.minetestConf.size > 0) {
             const contents = this.#renderMinetestConf();
             console.log("minetest.conf is: ", contents);
@@ -963,38 +1107,19 @@ function getDefaultLanguage() {
     return 'en';
 }
 
-// Persist FS to IndexedDB on page close
 window.addEventListener('beforeunload', (event) => {
-    if (Module && Module.FS && Module.FS.syncfs) {
-        console.log('Performing FS.syncfs(false) on beforeunload...');
-        try {
-            Module.FS.syncfs(false, err => {
-                if (err) {
-                    console.error('Error during FS.syncfs(false) on beforeunload:', err);
-                } else {
-                    console.log('FS.syncfs(false) on beforeunload completed.');
-                }
-            });
-            // Forcing sync, Emscripten docs mention this might be needed for beforeunload
-            // However, this is a synchronous operation and might be blocked by browsers.
-            // The async version above is preferred if it works.
-            // For critical saves, it's better to save explicitly from C++ and then sync.
-        } catch (e) {
-            console.error('Exception during FS.syncfs(false) on beforeunload:', e);
-        }
+    if (persistenceInitialized) {
+        console.log('WasmFS_IDB: beforeunload - attempting to sync WasmFS to IndexedDB.');
+        // This is a best-effort synchronous attempt if persistFS can be made sync,
+        // or we trigger an async one and hope it completes.
+        // For now, persistFS is async.
+        persistFS().then(() => {
+            console.log('WasmFS_IDB: beforeunload sync call completed (async).');
+        }).catch(err => {
+            console.warn('WasmFS_IDB: beforeunload sync call failed (async).', err);
+        });
+        // Note: True synchronous IndexedDB operations are not possible in beforeunload.
+        // The async call might not complete. Consider a small synchronous localStorage flag
+        // if you need to detect incomplete shutdowns, but that adds complexity.
     }
 });
-
-// Optional: Periodic sync
-// setInterval(() => {
-// if (Module && Module.FS && Module.FS.syncfs && mtScheduler.isSet("main_called")) {
-// console.log('Performing periodic FS.syncfs(false)...');
-// Module.FS.syncfs(false, err => {
-// if (err) {
-// console.error('Error during periodic FS.syncfs(false):', err);
-//        } else {
-// console.log('Periodic FS.syncfs(false) completed.');
-//        }
-//    });
-//    }
-// }, 60000); // Every 60 seconds

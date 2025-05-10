@@ -32,6 +32,7 @@ done
 
 # Copy assets
 cp -a "$BASE_DIR/static/assets/." "$ASSETS_DST_DIR"
+cp -a "$BASE_DIR/static/idb.js "$RELEASE_DIR"
 
 # Ideally this would be in RELEASE_DIR, but the way this file
 # is located (see emcc --source-map-base) apparently cannot be
