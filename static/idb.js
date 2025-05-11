@@ -115,6 +115,19 @@ class IDBManager {
             cursorRequest.onsuccess = (event) => {
                 const cursor = event.target.result;
                 if (cursor) {
+                    // Log the first few files to debug content format
+                    if (files.length < 2) {
+                        console.log('IDBManager debug - File content type:', {
+                            path: cursor.value.path,
+                            contentType: cursor.value.content ? typeof cursor.value.content : 'null',
+                            isArrayBuffer: cursor.value.content instanceof ArrayBuffer,
+                            isUint8Array: cursor.value.content instanceof Uint8Array,
+                            hasLength: cursor.value.content && typeof cursor.value.content.length === 'number',
+                            hasByteLength: cursor.value.content && typeof cursor.value.content.byteLength === 'number',
+                            length: cursor.value.content ? (cursor.value.content.length || cursor.value.content.byteLength || 0) : 0
+                        });
+                    }
+                    
                     files.push({
                         path: cursor.value.path,
                         content: cursor.value.content,
@@ -123,7 +136,9 @@ class IDBManager {
                     });
                     cursor.continue();
                 } else {
-                    // console.log('IDBManager: Loaded all files' + (basePath ? ' under ' + basePath : '') + '.', files.length);
+                    if (files.length > 0) {
+                        console.log('IDBManager: Loaded all files' + (basePath ? ' under ' + basePath : '') + '.', files.length);
+                    }
                     resolve(files);
                 }
             };

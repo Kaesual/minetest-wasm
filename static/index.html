@@ -28,7 +28,7 @@
 
         #start_screen {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: minmax(min(300px, 100%), 1fr) minmax(min(300px, 100%), 450px);
             gap: 30px;
             width: 100vw;
             height: 100vh;
@@ -71,6 +71,45 @@
             overflow-y: auto;
             border-radius: 15px;
             font-size: 1.15rem;
+            background-color: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            margin: 20px 0;
+            height: calc(100vh - 100px);
+            max-height: calc(100vh - 100px);
+        }
+
+        .thin_scrollbar {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.5) transparent;
+        }
+        
+        /* Styling for Webkit browsers (Chrome, Safari, newer Edge) */
+        .thin_scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .thin_scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        .thin_scrollbar::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.5);
+            border-radius: 20px;
+            border: 3px solid transparent;
+        }
+        
+        .thin_scrollbar::-webkit-scrollbar-thumb:hover {
+            background-color: rgba(255, 255, 255, 0.7);
+        }
+
+        .simple_list {
+            margin-left: 20px;
+            list-style-type: disc;
+        }
+
+        .simple_list li {
+            margin-bottom: 10px;
         }
 
         #start_screen_left_caption {
@@ -178,21 +217,75 @@
             background-color: #cccccc;
             cursor: not-allowed;
         }
+        
+        .storage-stats {
+            margin-top: 5px;
+            background-color: rgba(0, 0, 0, 0.1);
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+        }
+        
+        .storage-stats h4 {
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+            color: #444;
+        }
+        
+        .storage-stats table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+        
+        .storage-stats table td {
+            padding: 3px 0;
+            font-size: 0.8rem;
+        }
+        
+        .storage-stats table td:last-child {
+            text-align: right;
+            font-weight: bold;
+        }
+        
+        .storage-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .storage-actions button {
+            margin-top: 5px;
+            padding: 6px;
+            font-size: 0.75rem;
+            background-color: #6c757d;
+            opacity: 0.8;
+        }
+        
+        .storage-actions button:hover {
+            background-color: #5a6268;
+            opacity: 1;
+        }
 
         /* Mobile responsiveness */
-        @media screen and (max-width: 768px) {
+        @media screen and (max-width: 1000px) {
             #start_screen {
                 grid-template-columns: 1fr;
-                grid-template-rows: auto 1fr;
+                grid-template-rows: auto auto;
                 padding: 15px;
+                height: auto;
+                overflow-y: visible;
             }
 
             #start_screen_left {
-                padding: 10px;
+                padding: 15px;
+                height: auto;
+                max-height: none;
+                margin: 10px 0;
             }
 
             #start_screen_right {
-                padding: 10px;
+                padding: 15px;
+                margin: 10px 0;
             }
 
             h1 {
@@ -205,11 +298,14 @@
             }
         }
     </style>
+    <script type="text/javascript" src="%__RELEASE_UUID__%/snackbar.js"></script>
+    <script type="text/javascript" src="%__RELEASE_UUID__%/idb.js"></script>
+    <script type="text/javascript" src="%__RELEASE_UUID__%/storageManager.js"></script>
 </head>
 
 <body>
     <div id="start_screen">
-        <div id="start_screen_left">
+        <div id="start_screen_left" class="thin_scrollbar">
             <div id="start_screen_left_caption">
                 <img src="%__RELEASE_UUID__%/assets/minetest_logo.svg" alt="Minetest Logo" style="width: 100px; height: 100px;">
                 <div>Minetest</div>
@@ -228,6 +324,22 @@
                 <li>If you're spinning very fast when capturing the mouse, try to play in fullscreen mode instead. Just click the fullscreen icon in the community sidebar.</li>
             </ul>
             
+            <div style="margin-top: 25px; margin-bottom: 15px;">
+                <h3 style="font-size: 1.4rem; margin-bottom: 15px;">Updates</h3>
+                <p><strong>11.05.2025</strong></p>
+                <ul class="simple_list">
+                    <li>Added persistent storage support with IndexedDB to save your worlds and mods.</li>
+                    <li>Enhanced local storage management with statistics and cleanup tools.</li>
+                </ul>
+
+                <h3 style="font-size: 1.4rem; margin-top: 25px; margin-bottom: 15px;">Roadmap</h3>
+                <ul class="simple_list">
+                    <li>Host a server right here, in your browser. Invite your friends and play together.</li>
+                    <li>Add support for more mods and content.</li>
+                    <li>Offer server hosting as a service, for a small fee.</li>
+                </ul>
+            </div>
+            
             <div class="tribute">
                 <p style="text-decoration: underline;">A Tribute to the creators</p>
                 
@@ -239,21 +351,62 @@
             </div>
         </div>
         <div id="start_screen_right">
-            <div id="temporary_console" class="console"></div>
+            <div id="temporary_console" class="console thin_scrollbar"></div>
             
             <div id="launch_form" class="console">
-                <div class="form_row">
-                    <label>Select language</label>
-                    <select id="select_language">
-                        <!-- filled by javascript -->
-                    </select>
+                <div class="form-controls-row" style="display: flex; gap: 20px; margin-top: 10px;">
+                    <div style="flex: 1;">
+                        <label>Select language</label>
+                        <select id="select_language" style="width: 100%; margin-top: 5px;">
+                            <!-- filled by javascript -->
+                        </select>
+                    </div>
+                    
+                    <div style="flex: 1;">
+                        <label>Select network proxy</label>
+                        <select id="select_proxy" style="width: 100%; margin-top: 5px;">
+                            <!-- filled by javascript -->
+                        </select>
+                    </div>
                 </div>
                 
-                <div class="form_row">
-                    <label>Select network proxy</label>
-                    <select id="select_proxy">
-                        <!-- filled by javascript -->
-                    </select>
+                <div class="form_row" id="storage_options_container">
+                    <label>Storage Options:</label>
+                    <div>
+                        <input type="radio" id="storage_indexeddb" name="storage_type" value="indexeddb" checked>
+                        <label for="storage_indexeddb">IndexedDB (save worlds & mods in browser)</label>
+                        <div id="storage_stats" class="storage-stats">
+                            <h4>Storage Usage</h4>
+                            <table>
+                                <tr>
+                                    <td>Worlds:</td>
+                                    <td id="worlds_stats">0 files (0 Bytes)</td>
+                                </tr>
+                                <tr>
+                                    <td>Mods:</td>
+                                    <td id="mods_stats">0 files (0 Bytes)</td>
+                                </tr>
+                                <tr>
+                                    <td>Total:</td>
+                                    <td id="total_stats">0 files (0 Bytes)</td>
+                                </tr>
+                            </table>
+                            <div class="storage-actions">
+                                <button id="clear_worlds_btn" type="button" style="flex: 1;">Clear Worlds</button>
+                                <button id="clear_mods_btn" type="button" style="flex: 1;">Clear Mods</button>
+                                <button id="clear_all_btn" type="button" style="flex: 1;">Clear All</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="directory_option_container">
+                        <input type="radio" id="storage_directory" name="storage_type" value="directory">
+                        <label for="storage_directory">Local Directory (worlds & mods in local folder)</label>
+                        <button id="button_choose_directory" style="display: none; margin-top: 10px; background-color: #6c757d; padding: 10px; font-size: 0.9rem; height: auto;">Choose Game Directory</button>
+                    </div>
+                    <div>
+                        <input type="radio" id="storage_none" name="storage_type" value="no-storage">
+                        <label for="storage_none">No storage (data lost on close)</label>
+                    </div>
                 </div>
                 
                 <div class="form_row">
@@ -264,6 +417,29 @@
     </div>
     <script type="text/javascript" src="%__RELEASE_UUID__%/launcher.js"></script>
     <script type="text/javascript">
+
+        // Detect if we're in a sandboxed iframe
+        const isInIframe = (window !== window.parent);
+        let isSandboxed = false;
+        
+        try {
+            // Try to access parent window to determine if we're in a sandboxed iframe
+            if (isInIframe) {
+                // This will throw an error if we're sandboxed
+                window.parent.document;
+                isSandboxed = false;
+            }
+        } catch (e) {
+            // If we can't access parent.document, we're in a sandboxed iframe
+            isSandboxed = true;
+            console.log("Running in a sandboxed iframe environment");
+        }
+        
+        // If we can't use the File System API (in sandboxed iframe), hide or disable that option
+        const directoryOptionContainer = document.getElementById('directory_option_container');
+        if (isSandboxed) {
+            directoryOptionContainer.style.display = 'none';
+        }
 
         // Reduce memory and network usage
         function enableMemorySaving(mtl) {
@@ -284,6 +460,15 @@
         const startScreen = document.getElementById('start_screen');
         const launchBtn = document.getElementById('launch_btn');
         const tcon = document.getElementById('temporary_console');
+        
+        // Storage stats elements
+        const storageStats = document.getElementById('storage_stats');
+        const worldsStats = document.getElementById('worlds_stats');
+        const modsStats = document.getElementById('mods_stats');
+        const totalStats = document.getElementById('total_stats');
+        const clearWorldsBtn = document.getElementById('clear_worlds_btn');
+        const clearModsBtn = document.getElementById('clear_mods_btn');
+        const clearAllBtn = document.getElementById('clear_all_btn');
 
         const select_proxy = document.getElementById('select_proxy');
         const proxies = [
@@ -312,13 +497,15 @@
         function tcon_print(prefix, line) {
             if (prefix) {
                 for (child of tcon.childNodes) {
-                    if (child.nodeName == 'PRE' && child.innerText.startsWith(prefix)) {
+                    if (child.nodeName == 'P' && child.innerText.startsWith(prefix)) {
                         child.innerText = prefix + line;
                         return;
                     }
                 }
             }
-            const p = document.createElement('pre');
+            const p = document.createElement('p');
+            p.style.whiteSpace = 'pre-wrap';
+            p.style.fontFamily = 'monospace';
             p.innerText = prefix + line;
             tcon.appendChild(p);
             
@@ -329,18 +516,262 @@
         function wipePage() {
             startScreen.remove();
         }
+        
+        // Initialize StorageManager on startup for stats
+        let tempStorageManager = null;
+        
+        async function initializeStatsManager() {
+            // This is just for checking stats, real initialization happens when launching
+            if (typeof StorageManager !== 'undefined' && typeof IDBManager !== 'undefined') {
+                // Create temp instances just to check stats
+                const tempIdbManager = new IDBManager();
+                await tempIdbManager.initDB();
+                
+                tempStorageManager = new StorageManager();
+                tempStorageManager.idbManager = tempIdbManager;
+                
+                // Show storage stats
+                await updateStorageStats();
+                // Set up clear buttons
+                setupClearButtons();
+            } else {
+                console.warn("StorageManager or IDBManager not available for stats");
+            }
+        }
+        
+        async function updateStorageStats() {
+            if (!tempStorageManager || !tempStorageManager.idbManager) {
+                return;
+            }
+            
+            try {
+                // Check worlds
+                const worldFiles = await tempStorageManager.idbManager.getAllFiles('/minetest/worlds');
+                let worldSize = 0;
+                for (const file of worldFiles) {
+                    // Make sure we're accessing the content correctly and handling all possible formats
+                    if (file.content) {
+                        if (typeof file.content.length === 'number') {
+                            worldSize += file.content.length;
+                        } else if (file.content.byteLength) {
+                            // Handle ArrayBuffer or TypedArray
+                            worldSize += file.content.byteLength;
+                        } else if (typeof file.content === 'string') {
+                            // Handle string content
+                            worldSize += file.content.length;
+                        }
+                    }
+                }
+                
+                // Check mods
+                const modFiles = await tempStorageManager.idbManager.getAllFiles('/minetest/mods');
+                let modSize = 0;
+                for (const file of modFiles) {
+                    // Make sure we're accessing the content correctly and handling all possible formats
+                    if (file.content) {
+                        if (typeof file.content.length === 'number') {
+                            modSize += file.content.length;
+                        } else if (file.content.byteLength) {
+                            // Handle ArrayBuffer or TypedArray
+                            modSize += file.content.byteLength;
+                        } else if (typeof file.content === 'string') {
+                            // Handle string content
+                            modSize += file.content.length;
+                        }
+                    }
+                }
+                
+                // Log for debugging
+                console.log('Storage stats found:', {
+                    worlds: { files: worldFiles.length, size: worldSize },
+                    mods: { files: modFiles.length, size: modSize }
+                });
+                
+                // Update UI
+                function formatSize(bytes) {
+                    if (bytes === 0) return '0 Bytes';
+                    const k = 1024;
+                    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+                }
+                
+                worldsStats.textContent = `${worldFiles.length} files (${formatSize(worldSize)})`;
+                modsStats.textContent = `${modFiles.length} files (${formatSize(modSize)})`;
+                totalStats.textContent = `${worldFiles.length + modFiles.length} files (${formatSize(worldSize + modSize)})`;
+            } catch (e) {
+                console.error("Error updating storage stats:", e);
+            }
+        }
+        
+        function setupClearButtons() {
+            clearWorldsBtn.addEventListener('click', async () => {
+                const confirmed = await showConfirm('Are you sure you want to clear all saved worlds?', 'Clear Worlds', 'Cancel');
+                if (confirmed) {
+                    if (!tempStorageManager || !tempStorageManager.idbManager) {
+                        showError("Storage manager not available");
+                        return;
+                    }
+                    
+                    try {
+                        // Get all files that start with worlds path
+                        const files = await tempStorageManager.idbManager.getAllFiles('/minetest/worlds');
+                        // Delete each file
+                        for (const file of files) {
+                            await tempStorageManager.idbManager.deleteFile(file.path);
+                        }
+                        showInfo(`Deleted ${files.length} world files`);
+                        await updateStorageStats();
+                    } catch (e) {
+                        console.error("Error clearing worlds storage:", e);
+                        showError("Failed to clear worlds storage");
+                    }
+                }
+            });
+            
+            clearModsBtn.addEventListener('click', async () => {
+                const confirmed = await showConfirm('Are you sure you want to clear all saved mods?', 'Clear Mods', 'Cancel');
+                if (confirmed) {
+                    if (!tempStorageManager || !tempStorageManager.idbManager) {
+                        showError("Storage manager not available");
+                        return;
+                    }
+                    
+                    try {
+                        // Get all files that start with mods path
+                        const files = await tempStorageManager.idbManager.getAllFiles('/minetest/mods');
+                        // Delete each file
+                        for (const file of files) {
+                            await tempStorageManager.idbManager.deleteFile(file.path);
+                        }
+                        showInfo(`Deleted ${files.length} mod files`);
+                        await updateStorageStats();
+                    } catch (e) {
+                        console.error("Error clearing mods storage:", e);
+                        showError("Failed to clear mods storage");
+                    }
+                }
+            });
+            
+            clearAllBtn.addEventListener('click', async () => {
+                const confirmed = await showConfirm('Are you sure you want to clear ALL saved data (worlds and mods)?', 'Clear All Data', 'Cancel');
+                if (confirmed) {
+                    if (!tempStorageManager || !tempStorageManager.idbManager) {
+                        showError("Storage manager not available");
+                        return;
+                    }
+                    
+                    try {
+                        // Clear worlds
+                        const worldFiles = await tempStorageManager.idbManager.getAllFiles('/minetest/worlds');
+                        for (const file of worldFiles) {
+                            await tempStorageManager.idbManager.deleteFile(file.path);
+                        }
+                        
+                        // Clear mods
+                        const modFiles = await tempStorageManager.idbManager.getAllFiles('/minetest/mods');
+                        for (const file of modFiles) {
+                            await tempStorageManager.idbManager.deleteFile(file.path);
+                        }
+                        
+                        showInfo(`Deleted ${worldFiles.length + modFiles.length} files`);
+                        await updateStorageStats();
+                    } catch (e) {
+                        console.error("Error clearing all storage:", e);
+                        showError("Failed to clear storage");
+                    }
+                }
+            });
+        }
+        
+        // Initialize stats after page loads
+        window.addEventListener('load', () => {
+            // Small delay to ensure scripts are fully loaded
+            setTimeout(() => {
+                if (typeof StorageManager !== 'undefined' && typeof IDBManager !== 'undefined') {
+                    console.log("Scripts loaded, initializing stats manager");
+                    initializeStatsManager();
+                } else {
+                    console.error("Required scripts still not available after delay");
+                    // Try again with a longer delay as fallback
+                    setTimeout(() => {
+                        console.log("Retrying stats initialization...");
+                        if (typeof StorageManager !== 'undefined' && typeof IDBManager !== 'undefined') {
+                            initializeStatsManager();
+                        } else {
+                            console.error("Could not initialize storage stats - scripts missing");
+                        }
+                    }, 1000);
+                }
+            }, 200);
+        });
 
         function enableLaunchButton() {
             launchBtn.disabled = false;
             
-            launchBtn.addEventListener('click', () => {
+            launchBtn.addEventListener('click', async () => {
+                const selectedStorage = document.querySelector('input[name="storage_type"]:checked').value;
+                let storageOpts = { policy: selectedStorage };
+                if (selectedStorage === 'directory') {
+                    if (!directoryHandle) {
+                        showWarning('Please choose a directory for storage first!');
+                        return;
+                    }
+                    storageOpts.handle = directoryHandle;
+                }
+
                 const proxyIndex = document.getElementById('select_proxy').value;
                 const proxy = proxies[proxyIndex][0];
+                
+                // Show loading message for storage initialization
+                if (selectedStorage === 'indexeddb') {
+                    launchBtn.disabled = true;
+                    launchBtn.textContent = 'Loading saved worlds...';
+                    tcon_print("", "Loading saved data from IndexedDB...");
+                    
+                    // Pre-load worlds data into Module.FS before starting the game
+                    try {
+                        // Create a temporary manager just for preloading
+                        const preloadManager = new StorageManager();
+                        preloadManager.idbManager = new IDBManager();
+                        await preloadManager.idbManager.initDB();
+                        
+                        // Get reference to Module.FS
+                        const fs = mtl.getFS();
+                        if (fs) {
+                            preloadManager.fs = fs;
+                            preloadManager.storagePolicy = 'indexeddb';
+                            
+                            // Create necessary directories
+                            const worldsPath = '/minetest/worlds';
+                            const modsPath = '/minetest/mods';
+                            
+                            if (!fs.analyzePath(worldsPath).exists) {
+                                fs.mkdirTree(worldsPath);
+                            }
+                            if (!fs.analyzePath(modsPath).exists) {
+                                fs.mkdirTree(modsPath);
+                            }
+                            
+                            // Load worlds and mods from IndexedDB
+                            await preloadManager.initialLoadFromIDB(worldsPath);
+                            await preloadManager.initialLoadFromIDB(modsPath);
+                            
+                            tcon_print("", "Successfully loaded saved data!");
+                        } else {
+                            tcon_print("", "Warning: Unable to preload data, Module.FS not available yet");
+                        }
+                    } catch (e) {
+                        console.error("Error preloading data:", e);
+                        tcon_print("", "Warning: Error preloading saved data: " + e.message);
+                    }
+                }
+                
                 wipePage();
                 higherSettings(mtl);
                 mtl.setProxy(proxy);
                 mtl.setLang(select_language.value);
-                mtl.launch(args);
+                mtl.launch(args, storageOpts);
             });
         }
 
@@ -352,20 +783,20 @@
                     ws.send(cmd);
                 });
                 ws.addEventListener('error', (event) => {
-                    alert('Error initiating proxy connection');
+                    showError('Error initiating proxy connection');
                     finished = true;
                     reject(new Error('Received error'));
                 });
                 ws.addEventListener('close', (event) => {
                     if (!finished) {
-                        alert('Proxy connection closed unexpectedly');
+                        showWarning('Proxy connection closed unexpectedly');
                         finished = true;
                         reject(new Error('Received close'));
                     }
                 });
                 ws.addEventListener('message', (event) => {
                     if (typeof event.data !== 'string') {
-                        alert('Invalid message received from proxy');
+                        showError('Invalid message received from proxy');
                         finished = true;
                         reject(new Error('Invalid message'));
                         return;
@@ -409,7 +840,66 @@
             tcon_print("", "**************** FATAL ERROR ******************");
             tcon_print("", err);
             tcon_print("", "***********************************************");
+            showError("Fatal error: " + err);
         };
+
+        // Storage Options UI elements
+        const storageRadios = document.querySelectorAll('input[name="storage_type"]');
+        const chooseDirButton = document.getElementById('button_choose_directory');
+        let directoryHandle = null; // To store the selected FileSystemDirectoryHandle
+
+        function updatePlayButtonState() {
+            const selectedStorage = document.querySelector('input[name="storage_type"]:checked').value;
+            if (selectedStorage === 'directory') {
+                if (directoryHandle) {
+                    launchBtn.disabled = false;
+                    launchBtn.textContent = 'Play';
+                } else {
+                    launchBtn.disabled = true;
+                    launchBtn.textContent = 'Choose Directory to Play';
+                }
+            } else {
+                launchBtn.disabled = false; // Assuming it gets enabled by onready later
+                launchBtn.textContent = 'Play';
+            }
+        }
+
+        storageRadios.forEach(radio => {
+            radio.addEventListener('change', function() {
+                directoryHandle = null; // Reset directory handle when changing storage type
+                if (this.value === 'directory') {
+                    chooseDirButton.style.display = 'block';
+                    storageStats.style.display = 'none'; // Hide stats for directory option
+                } else if (this.value === 'indexeddb') {
+                    chooseDirButton.style.display = 'none';
+                    storageStats.style.display = 'block'; // Show stats for indexeddb option
+                } else {
+                    chooseDirButton.style.display = 'none';
+                    storageStats.style.display = 'none'; // Hide stats for no-storage option
+                }
+                updatePlayButtonState(); // Update Play button based on new selection
+            });
+        });
+
+        chooseDirButton.addEventListener('click', async () => {
+            try {
+                directoryHandle = await window.showDirectoryPicker();
+                if (directoryHandle) {
+                    console.log('Directory selected:', directoryHandle.name);
+                    tcon_print("Directory: ", directoryHandle.name + " selected for storage.");
+                    showInfo("Directory selected: " + directoryHandle.name);
+                    // Verify permissions (optional, browser usually handles this)
+                    // const permission = await directoryHandle.queryPermission({ mode: 'readwrite' });
+                    // if (permission === 'granted') { ... } 
+                }
+            } catch (err) {
+                console.error('Error choosing directory:', err);
+                tcon_print("Directory: ", "No directory selected or permission denied.");
+                showWarning("No directory selected or permission denied");
+                directoryHandle = null; // Ensure it's null on error
+            }
+            updatePlayButtonState(); // Update after attempting to choose directory
+        });
     </script>
 </body>
 

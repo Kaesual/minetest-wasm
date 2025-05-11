@@ -218,6 +218,7 @@ const mtScheduler = new LaunchScheduler();
 // --- START WasmFS Persistence Logic ---
 let persistenceInitialized = false;
 let idbManager = null; // Will be instance of IDBManager
+let storageManager = null; // Will be instance of StorageManager
 let lastKnownMtimes = new Map(); // path -> mtime (timestamp)
 const WORLDS_SYNC_BASE_PATH = '/minetest/worlds'; // Only sync this subtree
 
@@ -378,19 +379,49 @@ async function persistFS() {
 // --- END WasmFS Persistence Logic ---
 
 function loadIDBScript(callback) {
+    // If already loaded, just run callback
+    if (typeof IDBManager !== 'undefined') {
+        console.log('idb.js already loaded, skipping load.');
+        loadStorageManagerScript(callback);
+        return;
+    }
+
     const idbScript = document.createElement('script');
     idbScript.src = RELEASE_DIR + "/idb.js"; // Assuming idb.js is in the same directory (static/)
     idbScript.onload = () => {
         console.log('idb.js loaded successfully.');
-        if (callback) callback();
+        loadStorageManagerScript(callback);
     };
     idbScript.onerror = () => {
         console.error('Failed to load idb.js!');
-        alert('Critical error: Could not load IndexedDB helper. Saves will not work.');
+        showError('Critical error: Could not load IndexedDB helper. Saves will not work.');
         // Potentially block further execution or allow launch without persistence
         if (callback) callback(new Error('Failed to load idb.js'));
     };
     document.head.appendChild(idbScript);
+}
+
+function loadStorageManagerScript(callback) {
+    // If already loaded, just run callback
+    if (typeof StorageManager !== 'undefined') {
+        console.log('storageManager.js already loaded, skipping load.');
+        if (callback) callback();
+        return;
+    }
+
+    const storageScript = document.createElement('script');
+    storageScript.src = RELEASE_DIR + "/storageManager.js"; 
+    storageScript.onload = () => {
+        console.log('storageManager.js loaded successfully.');
+        if (callback) callback();
+    };
+    storageScript.onerror = () => {
+        console.error('Failed to load storageManager.js!');
+        showError('Critical error: Could not load StorageManager. Saves will not work.');
+        // Potentially block further execution or allow launch without persistence
+        if (callback) callback(new Error('Failed to load storageManager.js'));
+    };
+    document.head.appendChild(storageScript);
 }
 
 function loadWasm() {
@@ -446,11 +477,19 @@ function emloop_ready() {
     console.log("emloop_ready called. Inspecting Module object:", Module);
 
     loadIDBScript(() => {
-        // This callback is executed after idb.js is loaded (or fails to load)
+        // This callback is executed after idb.js and storageManager.js are loaded
         if (typeof IDBManager === 'undefined') {
             console.error("emloop_ready: IDBManager class not found even after idb.js attempted to load. Saves will not work.");
             mtScheduler.isReady = true; // Allow launch but persistence is broken
-            alert("Critical error: IDBManager not available. Game saves will not work!");
+            showError("Critical error: IDBManager not available. Game saves will not work!");
+            mtScheduler.setCondition("wasmReady"); // Still set wasmReady, as the wasm module itself might be fine
+            return;
+        }
+
+        if (typeof StorageManager === 'undefined') {
+            console.error("emloop_ready: StorageManager class not found even after storageManager.js attempted to load. Saves will not work.");
+            mtScheduler.isReady = true; // Allow launch but persistence is broken
+            showError("Critical error: StorageManager not available. Game saves will not work!");
             mtScheduler.setCondition("wasmReady"); // Still set wasmReady, as the wasm module itself might be fine
             return;
         }
@@ -458,17 +497,11 @@ function emloop_ready() {
         if (Module && Module.FS && typeof Module.FS.mkdir === 'function') {
             console.log("emloop_ready: Module.FS and Module.FS.mkdir ARE available here.");
             
-            initializePersistentFS(async (err) => { // Made async to use await inside
-                if (err) {
-                    console.error('WasmFS_IDB: Initial persistence setup failed. World saves might not be persistent.', err);
-                } else {
-                    console.log('WasmFS_IDB: Initial persistence setup appears complete.');
-                    // Start periodic sync only if initialization was successful
-                    setInterval(persistFS, 30000); // Sync every 30 seconds
-                    console.log('WasmFS_IDB: Periodic sync to IndexedDB started (every 30s).');
-                }
-                mtScheduler.isReady = true; 
-            });
+            // Create StorageManager instance - it will be initialized when launch() is called
+            storageManager = new StorageManager();
+            console.log('StorageManager instance created. Will be initialized with settings when launch() is called.');
+            mtScheduler.isReady = true;
+            mtScheduler.setCondition("wasmReady");
 
         } else {
             console.error("emloop_ready: Module.FS or Module.FS.mkdir is STILL NOT available here.");
@@ -480,9 +513,9 @@ function emloop_ready() {
             // If FS isn't available, persistence definitely won't work.
             // Allow launch but with a clear warning.
             mtScheduler.isReady = true;
-            alert("Critical error: Emscripten FileSystem (Module.FS) is not available. Game saves will not work!");
+            showError("Critical error: Emscripten FileSystem (Module.FS) is not available. Game saves will not work!");
+            mtScheduler.setCondition("wasmReady");
         }
-        mtScheduler.setCondition("wasmReady");
     });
 }
 
@@ -545,7 +578,10 @@ var Module = {
         // As a default initial behavior, pop up an alert when webgl context is lost. To make your
         // application robust, you may want to override this behavior before shipping!
         // See http://www.khronos.org/registry/webgl/specs/latest/1.0/#5.15.2
-        mtCanvas.addEventListener("webglcontextlost", function(e) { alert('WebGL context lost. You will need to reload the page.'); e.preventDefault(); }, false);
+        mtCanvas.addEventListener("webglcontextlost", function(e) { 
+            showError('WebGL context lost. You will need to reload the page.'); 
+            e.preventDefault(); 
+        }, false);
 
         return mtCanvas;
     })(),
@@ -843,6 +879,14 @@ class MinetestLauncher {
         this.minetestConf.set(key, value);
     }
 
+    // Get access to the WASM filesystem
+    getFS() {
+        if (typeof Module !== 'undefined' && Module.FS) {
+            return Module.FS;
+        }
+        return null;
+    }
+
     #renderMinetestConf() {
         let lines = [];
         for (const [k, v] of this.minetestConf.entries()) {
@@ -853,7 +897,7 @@ class MinetestLauncher {
 
     setLang(lang) {
         if (!SUPPORTED_LANGUAGES_MAP.has(lang)) {
-            alert(`Invalid code in setLang: ${lang}`);
+            showWarning(`Invalid language code: ${lang}`);
         }
         this.setConf("language", lang);
     }
@@ -922,7 +966,7 @@ class MinetestLauncher {
             if (this.onerror) {
                 this.onerror(`${err}`);
             } else {
-                alert(`Error while loading ${packUrl}. Please refresh page`);
+                showError(`Error loading ${packUrl}. Please refresh page`);
             }
             throw new Error(`${err}`);
         }
@@ -955,7 +999,7 @@ class MinetestLauncher {
     // This must be called from a keyboard or mouse event handler,
     // after the 'onready' event has fired. (For this reason, it cannot
     // be called from the `onready` handler)
-    launch(args) {
+    launch(args, storageOptions = { policy: 'no-storage' }) {
         if (!this.isReady()) {
             throw new Error("launch called before onready");
         }
@@ -966,6 +1010,30 @@ class MinetestLauncher {
             throw new Error("launch called twice");
         }
         this.args = args;
+
+        // Log the chosen storage options
+        console.log("Storage policy selected:", storageOptions.policy);
+        if (storageOptions.policy === 'directory' && storageOptions.handle) {
+            console.log("Directory handle provided:", storageOptions.handle.name);
+        } else if (storageOptions.policy === 'directory' && !storageOptions.handle) {
+            console.warn("Directory storage policy selected, but no directory handle provided to launch(). This should not happen if UI logic is correct.");
+        }
+        
+        // Initialize StorageManager if available
+        if (storageManager) {
+            // This will happen asynchronously but we're not waiting for it
+            storageManager.initialize(storageOptions, Module.FS)
+                .then(() => {
+                    console.log('StorageManager initialized successfully with policy:', storageOptions.policy);
+                })
+                .catch(err => {
+                    console.error('StorageManager initialization failed:', err);
+                    // Continue anyway with no-storage policy (StorageManager handles fallback internally)
+                });
+        } else {
+            console.warn('StorageManager not available for persistence.');
+        }
+
         if (this.args.gameid) {
             this.addPack(this.args.gameid);
         }
@@ -1065,7 +1133,7 @@ function getDefaultLanguage() {
         if (SUPPORTED_LANGUAGES_MAP.has(lang)) {
             return lang;
         }
-        alert(`Invalid lang parameter: ${lang}`);
+        showWarning(`Invalid lang parameter: ${lang}`);
         return 'en';
     }
 
@@ -1107,19 +1175,24 @@ function getDefaultLanguage() {
     return 'en';
 }
 
-window.addEventListener('beforeunload', (event) => {
-    if (persistenceInitialized) {
+window.addEventListener('beforeunload', async (event) => {
+    // Check for StorageManager first, then fall back to old-style persistence
+    if (storageManager && storageManager.storagePolicy !== 'no-storage') {
+        console.log('StorageManager: beforeunload event - attempting final sync.');
+        try {
+            // We need to try to execute this synchronously as much as possible in beforeunload
+            await storageManager.onTeardown();
+            console.log('StorageManager: beforeunload sync completed.');
+        } catch (err) {
+            console.warn('StorageManager: beforeunload sync failed:', err);
+        }
+    } else if (persistenceInitialized) {
         console.log('WasmFS_IDB: beforeunload - attempting to sync WasmFS to IndexedDB.');
-        // This is a best-effort synchronous attempt if persistFS can be made sync,
-        // or we trigger an async one and hope it completes.
-        // For now, persistFS is async.
-        persistFS().then(() => {
-            console.log('WasmFS_IDB: beforeunload sync call completed (async).');
-        }).catch(err => {
-            console.warn('WasmFS_IDB: beforeunload sync call failed (async).', err);
-        });
-        // Note: True synchronous IndexedDB operations are not possible in beforeunload.
-        // The async call might not complete. Consider a small synchronous localStorage flag
-        // if you need to detect incomplete shutdowns, but that adds complexity.
+        try {
+            await persistFS();
+            console.log('WasmFS_IDB: beforeunload sync call completed.');
+        } catch (err) {
+            console.warn('WasmFS_IDB: beforeunload sync call failed:', err);
+        }
     }
 });
