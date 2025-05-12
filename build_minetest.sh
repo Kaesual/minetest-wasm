@@ -14,7 +14,7 @@ pushd minetest
 export EMSDK_EXTRA="-sUSE_SDL=2"
 export CFLAGS="$CFLAGS $EMSDK_EXTRA"
 export CXXFLAGS="$CXXFLAGS $EMSDK_EXTRA"
-export LDFLAGS="$LDFLAGS $EMSDK_EXTRA -sPTHREAD_POOL_SIZE=20 -s EXPORTED_RUNTIME_METHODS=FS,ccall,cwrap -s INITIAL_MEMORY=2013265920 -sMIN_WEBGL_VERSION=2 -sUSE_WEBGL2 -sWASMFS=1 -sASYNCIFY=1 -sFORCE_FILESYSTEM -sFS_DEBUG"
+export LDFLAGS="$LDFLAGS $EMSDK_EXTRA -sPTHREAD_POOL_SIZE=20 -s EXPORTED_RUNTIME_METHODS=FS,ccall,cwrap -s INITIAL_MEMORY=2013265920 -sMIN_WEBGL_VERSION=2 -sUSE_WEBGL2 -sWASMFS=1 -sASYNCIFY=1 -sFORCE_FILESYSTEM=1"
 export LDFLAGS="$LDFLAGS -L$INSTALL_DIR/lib -larchive -lssl -lcrypto -lemsocket -lwebsocket.js"
 
 # Create a dummy .o file to use as a substitute for the OpenGLES2 / EGL libraries,
@@ -27,6 +27,11 @@ mkdir -p dummy_dir
 DUMMY_INCLUDE_DIR="$(pwd)/dummy_dir"
 
 if ! $INCREMENTAL; then
+    # Apply minetest_filesys patch before building
+    pushd "$SOURCES_DIR"
+    patch -p0 < "$BASE_DIR/minetest_filesys.patch"
+    popd
+    
     emcmake cmake \
       -DCMAKE_VERBOSE_MAKEFILE=ON \
       -DENABLE_SYSTEM_GMP=OFF \

@@ -495,7 +495,7 @@ function emloop_ready() {
         }
 
         if (Module && Module.FS && typeof Module.FS.mkdir === 'function') {
-            console.log("emloop_ready: Module.FS and Module.FS.mkdir ARE available here.");
+            console.log("emloop_ready: Module.FS and Module.FS.mkdir are available.");
             
             // Create StorageManager instance - it will be initialized when launch() is called
             storageManager = new StorageManager();
@@ -571,45 +571,7 @@ function consolePrint(text) {
 }
 
 var Module = {
-    preRun: [function() {
-        console.log('Setting up file write tracking...');
-        // Setup tracking delegate to monitor file write operations
-        if (typeof FS !== 'undefined' && FS && FS.trackingDelegate) {
-            // Keep track of recently written files to avoid multiple syncs for the same file in a short period
-            const recentWrites = new Map();
-            const WRITE_DEBOUNCE_TIME = 500; // ms
-
-            // Add tracking for file write operations
-            FS.trackingDelegate['onWriteToFile'] = function(path, bytesWritten) {
-                // if (bytesWritten > 0) {
-                //     // Check if this is a file we care about (worlds or mods directory)
-                //     if (path.startsWith('/minetest/worlds/') || path.startsWith('/minetest/mods/')) {
-                //         const now = Date.now();
-                //         recentWrites.set(path, now);
-                        
-                //         // Schedule a sync after a short debounce period
-                //         setTimeout(() => {
-                //             const writeTime = recentWrites.get(path);
-                //             if (writeTime && (now === writeTime)) {
-                //                 // Only sync if this is still the most recent write for this file
-                //                 recentWrites.delete(path);
-                //                 console.log(`File changed, syncing: ${path}`);
-                //                 if (storageManager) {
-                //                     storageManager.syncNow().catch(err => {
-                //                         console.error('Error syncing after file write:', err);
-                //                     });
-                //                 }
-                //             }
-                //         }, WRITE_DEBOUNCE_TIME);
-                //     }
-                // }
-                console.log('File written:', path, bytesWritten);
-            };
-            console.log('File write tracking set up successfully');
-        } else {
-            console.warn('FS.trackingDelegate is not available. File change detection will not work.');
-        }
-    }],
+    preRun: [],
     postRun: [],
     print: consolePrint,
     canvas: (function() {
@@ -631,7 +593,100 @@ var Module = {
         this.totalDependencies = Math.max(this.totalDependencies, left);
         if (!mtLauncher || !mtLauncher.onprogress) return;
         mtLauncher.onprogress('wasm_module', (this.totalDependencies-left) / this.totalDependencies);
-    }
+    },
+    // Handler for file changes reported by C++ code
+    onFileChange: function(path, isDirectory) {
+        console.log("File changed:", path, "isDirectory:", isDirectory);
+
+        // Normalize the path to handle cases like "/minetest/bin/../worlds/asd/foo.txt"
+        // We need to resolve relative path segments like ".." and "."
+        function normalizePath(path) {
+            // Split the path into segments
+            const segments = path.split('/');
+            const resultSegments = [];
+            
+            for (let i = 0; i < segments.length; i++) {
+                const segment = segments[i];
+                
+                // Handle parent directory segments
+                if (segment === '..') {
+                    if (resultSegments.length > 0) {
+                        resultSegments.pop();
+                    }
+                    continue;
+                }
+                
+                // Add valid segments to the result
+                resultSegments.push(segment);
+            }
+            
+            // Reconstruct the path
+            let normalizedPath = resultSegments.join('/');
+            
+            return normalizedPath;
+        }
+        
+        // Normalize the path before processing
+        const normalizedPath = normalizePath(path);
+        if (normalizedPath.startsWith('/minetest/worlds/') || normalizedPath.startsWith('/minetest/mods/')) {
+            // Only save worlds and mods to IndexedDB
+            // Check if storage manager is available
+            if (typeof storageManager !== 'undefined' && storageManager) {
+                // For directories, we just need to ensure they exist in IndexedDB
+                if (isDirectory) {
+                    storageManager.ensureDirectoryExists(normalizedPath);
+                } else {
+                    // For files, read from WASMFS and persist to IndexedDB
+                    try {
+                        const content = FS.readFile(normalizedPath, { encoding: 'binary' });
+                        storageManager.persistFile(normalizedPath, content);
+                    } catch (e) {
+                        console.error("Error persisting file:", normalizedPath, e);
+                    }
+                }
+            }
+        }
+    },
+    
+    // Handler for file deletions reported by C++ code
+    onFileDelete: function(path, isDirectory) {
+        console.log("File deleted:", path, "isDirectory:", isDirectory);
+        
+        // Check if storage manager is available
+        if (typeof storageManager !== 'undefined' && storageManager) {
+            if (isDirectory) {
+                // For directories, we need to delete the directory and all its contents
+                storageManager.deleteDirectory(path);
+            } else {
+                // For single files, delete just that file
+                storageManager.deleteFile(path);
+            }
+        }
+    },
+    
+    // Handler for map block saves
+    onMapBlockSaved: function(x, y, z) {
+        console.log("Map block saved at:", x, y, z);
+        
+        // This is useful for tracking which parts of the world are being modified
+        // We could use this to prioritize certain areas for syncing
+        if (typeof storageManager !== 'undefined' && storageManager) {
+            // The actual file path for the block is already handled by onFileChange
+            // But we can use this to track block-level statistics if needed
+            storageManager.recordBlockSave(x, y, z);
+        }
+    },
+    
+    // Handler for mod storage changes
+    onModStorageChanged: function(modname, key) {
+        console.log("Mod storage changed for mod:", modname, "key:", key);
+        
+        // We could use this to prioritize mod-related files for syncing
+        if (typeof storageManager !== 'undefined' && storageManager) {
+            // The actual file save will trigger onFileChange
+            storageManager.recordModChange(modname, key);
+        }
+    },
 };
 
 Module['printErr'] = Module['print'];
@@ -1208,55 +1263,79 @@ function getDefaultLanguage() {
     return 'en';
 }
 
-window.addEventListener('beforeunload', async (event) => {
-    // Check for StorageManager first, then fall back to old-style persistence
-    if (storageManager && storageManager.storagePolicy !== 'no-storage') {
-        console.log('StorageManager: beforeunload event - attempting final sync.');
-        try {
-            // We need to try to execute this synchronously as much as possible in beforeunload
-            await storageManager.onTeardown();
-            console.log('StorageManager: beforeunload sync completed.');
-        } catch (err) {
-            console.warn('StorageManager: beforeunload sync failed:', err);
-        }
-    } else if (persistenceInitialized) {
-        console.log('WasmFS_IDB: beforeunload - attempting to sync WasmFS to IndexedDB.');
-        try {
-            await persistFS();
-            console.log('WasmFS_IDB: beforeunload sync call completed.');
-        } catch (err) {
-            console.warn('WasmFS_IDB: beforeunload sync call failed:', err);
-        }
-    }
-});
+// Add these helper methods to the StorageManager class
 
-// Add function to handle game exit
-function handleGameExit() {
-    console.log("Game has exited");
+/**
+ * Ensures a directory exists in IndexedDB
+ * @param {string} dirPath - Path to the directory
+ */
+StorageManager.prototype.ensureDirectoryExists = function(dirPath) {
+    console.log("Ensuring directory exists in IndexedDB:", dirPath);
+    // The actual implementation depends on how your IDB structure works
+    // This might just be a record in the directories table or creating empty marker files
     
-    // Last sync before showing the manual sync button
-    if (storageManager) {
-        storageManager.syncNow().catch(err => {
-            console.error('Error during exit sync:', err);
-        });
+    if (this.idbManager) {
+        this.idbManager.storeDirectory(dirPath);
     }
-    
-    // Show the manual sync button
-    if (typeof showManualSyncButton === 'function') {
-        showManualSyncButton();
-    }
-}
+};
 
-// Modify Module's quit function to handle game exit
-// var originalQuit = Module.quit;
-// Module.quit = function(status) {
-//     console.log("Module quit called with status:", status);
+/**
+ * Persists a file to IndexedDB
+ * @param {string} filePath - Path to the file
+ * @param {Uint8Array} content - File content as binary data
+ */
+StorageManager.prototype.persistFile = function(filePath, content) {
+    console.log("Persisting file to IndexedDB:", filePath, "size:", content.length);
     
-//     // Call the original quit function
-//     if (typeof originalQuit === 'function') {
-//         originalQuit(status);
-//     }
+    if (this.idbManager) {
+        this.idbManager.saveFile(filePath, content);
+    }
+};
+
+/**
+ * Deletes a file from IndexedDB
+ * @param {string} filePath - Path to the file to delete
+ */
+StorageManager.prototype.deleteFile = function(filePath) {
+    console.log("Deleting file from IndexedDB:", filePath);
     
-//     // Handle the game exit
-//     handleGameExit();
-// };
+    if (this.idbManager) {
+        this.idbManager.deleteFile(filePath);
+    }
+};
+
+/**
+ * Deletes a directory and all its contents from IndexedDB
+ * @param {string} dirPath - Path to the directory to delete
+ */
+StorageManager.prototype.deleteDirectory = function(dirPath) {
+    console.log("Deleting directory from IndexedDB:", dirPath);
+    
+    if (this.idbManager) {
+        // Get files in and under this directory and delete them
+        this.idbManager.deleteDirectory(dirPath);
+    }
+};
+
+/**
+ * Records block saves for statistics
+ * @param {number} x - Block X coordinate
+ * @param {number} y - Block Y coordinate
+ * @param {number} z - Block Z coordinate
+ */
+StorageManager.prototype.recordBlockSave = function(x, y, z) {
+    // This method is optional - it can be used for statistics or prioritization
+    // Currently just logs the save
+    console.debug("Block saved at", x, y, z);
+};
+
+/**
+ * Records mod storage changes for statistics
+ * @param {string} modname - Name of the mod
+ * @param {string} key - Key that was changed
+ */
+StorageManager.prototype.recordModChange = function(modname, key) {
+    // This method is optional - it can be used for statistics or prioritization
+    // Currently just logs the change
+    console.debug("Mod storage changed:", modname, key);
+};

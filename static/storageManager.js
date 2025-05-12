@@ -94,12 +94,26 @@ class StorageManager {
 
             for (const file of files) {
                 try {
+                    // Create directory if it doesn't exist
                     const dir = file.path.substring(0, file.path.lastIndexOf('/'));
                     if (dir && !this.fs.analyzePath(dir).exists) {
                         this.fs.mkdirTree(dir);
                     }
-                    this.fs.writeFile(file.path, file.content);
-                    this.lastKnownMtimesIDB.set(file.path, file.mtime.getTime());
+                    
+                    // Ensure content is properly typed for writing to filesystem
+                    // This is critical to avoid binary corruption
+                    if (file.content) {
+                        // If file.content is already a Uint8Array, use it directly
+                        // Otherwise, convert it to ensure binary safety
+                        const content = file.content instanceof Uint8Array ? 
+                            file.content : 
+                            new Uint8Array(file.content);
+                            
+                        this.fs.writeFile(file.path, content);
+                        this.lastKnownMtimesIDB.set(file.path, file.mtime.getTime());
+                    } else {
+                        console.warn(`StorageManager-IDB: Empty content for file ${file.path}, skipping`);
+                    }
                 } catch (e) {
                     console.error('StorageManager-IDB: Error writing file to WasmFS:', file.path, e);
                 }
@@ -137,8 +151,19 @@ class StorageManager {
                     // Mark this path as existing in WasmFS
                     existingPaths.add(currentPath);
                     
+                    // Only update if the file has been modified since last sync
                     if (currentMtimeMs !== knownMtimeMs) {
-                        const content = this.fs.readFile(currentPath, { encoding: 'binary' });
+                        // Read file content as binary data
+                        // We're explicitly reading as Uint8Array to ensure consistent binary handling
+                        let content;
+                        try {
+                            // Read the file with the correct encoding for binary files
+                            content = new Uint8Array(this.fs.readFile(currentPath));
+                        } catch (readError) {
+                            console.error(`Error reading file for sync: ${currentPath}`, readError);
+                            return;
+                        }
+                        
                         await this.idbManager.saveFile(currentPath, content, stat.mtime * 1000, stat.atime * 1000);
                         this.lastKnownMtimesIDB.set(currentPath, currentMtimeMs);
                         filesSynced++;
@@ -342,25 +367,96 @@ class StorageManager {
     }
     
     /**
+     * Force clear all storage by recreating the database
+     * This is a more drastic approach when regular clearing fails
+     */
+    async forceClearStorage() {
+        try {
+            console.log('StorageManager: Force clearing all storage data');
+            
+            // Stop any active sync
+            this.stopPeriodicSync();
+            
+            // Set the storage policy to indexeddb if not already
+            if (this.storagePolicy !== 'indexeddb') {
+                console.warn('StorageManager: Storage policy was not set to indexeddb, forcing it for cleanup');
+                this.storagePolicy = 'indexeddb';
+            }
+            
+            // Close current database connection
+            if (this.idbManager && this.idbManager.db) {
+                this.idbManager.db.close();
+                this.idbManager.db = null;
+            }
+            
+            // Request deletion of the entire database
+            const dbName = this.idbManager ? this.idbManager.dbName : 'MinetestWasmWorldsDB';
+            await new Promise((resolve, reject) => {
+                const request = indexedDB.deleteDatabase(dbName);
+                request.onsuccess = () => {
+                    console.log(`StorageManager: Successfully deleted database ${dbName}`);
+                    resolve();
+                };
+                request.onerror = (event) => {
+                    console.error(`StorageManager: Error deleting database ${dbName}`, event.target.error);
+                    reject(event.target.error);
+                };
+            });
+            
+            // Recreate the database and manager
+            this.idbManager = new IDBManager();
+            await this.idbManager.initDB();
+            
+            // Recreate base directories
+            await this.idbManager.storeDirectory(this.WORLDS_SYNC_BASE_PATH);
+            await this.idbManager.storeDirectory(this.MODS_SYNC_BASE_PATH);
+            
+            // Clear memory map
+            this.lastKnownMtimesIDB.clear();
+            
+            // Restart sync
+            this.startPeriodicSync();
+            
+            // Update stats
+            await this.updateStorageStats();
+            
+            console.log('StorageManager: Database completely reset');
+            return true;
+        } catch (e) {
+            console.error('StorageManager: Error force clearing storage', e);
+            showError('Failed to force clear storage: ' + e.message);
+            return false;
+        }
+    }
+
+    /**
      * Clear storage data
      * @param {string} area - 'worlds', 'mods', or 'all'
+     * @param {boolean} force - Whether to use force deletion (recreates database) when area is 'all'
      */
-    async clearStorage(area = 'all') {
+    async clearStorage(area = 'all', force = false) {
         if (!this.idbManager && this.storagePolicy === 'indexeddb') {
             console.error('StorageManager: Cannot clear storage without initialized IDBManager');
             return false;
         }
         
         try {
+            // If force is true and we're clearing all, use forceClearStorage
+            if (force && area === 'all') {
+                return await this.forceClearStorage();
+            }
+            
+            console.log(`StorageManager: Clearing storage area: ${area}`);
+            
             if (area === 'worlds' || area === 'all') {
                 if (this.storagePolicy === 'indexeddb') {
-                    // Get all files that start with worlds path
-                    const files = await this.idbManager.getAllFiles(this.WORLDS_SYNC_BASE_PATH);
-                    // Delete each file
-                    for (const file of files) {
-                        await this.idbManager.deleteFile(file.path);
-                    }
-                    console.log(`StorageManager: Deleted ${files.length} world files from IndexedDB`);
+                    // Use deleteDirectory to properly clean up both files and directories
+                    await this.idbManager.deleteDirectory(this.WORLDS_SYNC_BASE_PATH);
+                    
+                    // Recreate the base directory
+                    await this.idbManager.storeDirectory(this.WORLDS_SYNC_BASE_PATH);
+                    
+                    console.log('StorageManager: Deleted all world files and directories from IndexedDB');
                 }
                 
                 // Clear memory map
@@ -373,13 +469,13 @@ class StorageManager {
             
             if (area === 'mods' || area === 'all') {
                 if (this.storagePolicy === 'indexeddb') {
-                    // Get all files that start with mods path
-                    const files = await this.idbManager.getAllFiles(this.MODS_SYNC_BASE_PATH);
-                    // Delete each file
-                    for (const file of files) {
-                        await this.idbManager.deleteFile(file.path);
-                    }
-                    console.log(`StorageManager: Deleted ${files.length} mod files from IndexedDB`);
+                    // Use deleteDirectory to properly clean up both files and directories
+                    await this.idbManager.deleteDirectory(this.MODS_SYNC_BASE_PATH);
+                    
+                    // Recreate the base directory
+                    await this.idbManager.storeDirectory(this.MODS_SYNC_BASE_PATH);
+                    
+                    console.log('StorageManager: Deleted all mod files and directories from IndexedDB');
                 }
                 
                 // Clear memory map

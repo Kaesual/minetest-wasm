@@ -546,17 +546,25 @@
         async function initializeStatsManager() {
             // This is just for checking stats, real initialization happens when launching
             if (typeof StorageManager !== 'undefined' && typeof IDBManager !== 'undefined') {
-                // Create temp instances just to check stats
-                const tempIdbManager = new IDBManager();
-                await tempIdbManager.initDB();
-                
-                tempStorageManager = new StorageManager();
-                tempStorageManager.idbManager = tempIdbManager;
-                
-                // Show storage stats
-                await updateStorageStats();
-                // Set up clear buttons
-                setupClearButtons();
+                try {
+                    // Create temp instances just to check stats
+                    const tempIdbManager = new IDBManager();
+                    await tempIdbManager.initDB();
+                    
+                    tempStorageManager = new StorageManager();
+                    tempStorageManager.idbManager = tempIdbManager;
+                    tempStorageManager.storagePolicy = 'indexeddb'; // Explicitly set storage policy
+                    
+                    console.log('Storage manager initialized with indexeddb policy');
+                    
+                    // Show storage stats
+                    await updateStorageStats();
+                    // Set up clear buttons
+                    setupClearButtons();
+                } catch (error) {
+                    console.error("Error initializing storage manager:", error);
+                    showError("Failed to initialize storage manager");
+                }
             } else {
                 console.warn("StorageManager or IDBManager not available for stats");
             }
@@ -631,20 +639,18 @@
             clearWorldsBtn.addEventListener('click', async () => {
                 const confirmed = await showConfirm('Are you sure you want to clear all saved worlds?', 'Clear Worlds', 'Cancel');
                 if (confirmed) {
-                    if (!tempStorageManager || !tempStorageManager.idbManager) {
+                    if (!tempStorageManager) {
                         showError("Storage manager not available");
                         return;
                     }
                     
                     try {
-                        // Get all files that start with worlds path
-                        const files = await tempStorageManager.idbManager.getAllFiles('/minetest/worlds');
-                        // Delete each file
-                        for (const file of files) {
-                            await tempStorageManager.idbManager.deleteFile(file.path);
+                        // Use the proper StorageManager clearStorage method
+                        const success = await tempStorageManager.clearStorage('worlds');
+                        if (success) {
+                            showInfo("All world data has been cleared");
+                            await updateStorageStats();
                         }
-                        showInfo(`Deleted ${files.length} world files`);
-                        await updateStorageStats();
                     } catch (e) {
                         console.error("Error clearing worlds storage:", e);
                         showError("Failed to clear worlds storage");
@@ -655,20 +661,18 @@
             clearModsBtn.addEventListener('click', async () => {
                 const confirmed = await showConfirm('Are you sure you want to clear all saved mods?', 'Clear Mods', 'Cancel');
                 if (confirmed) {
-                    if (!tempStorageManager || !tempStorageManager.idbManager) {
+                    if (!tempStorageManager) {
                         showError("Storage manager not available");
                         return;
                     }
                     
                     try {
-                        // Get all files that start with mods path
-                        const files = await tempStorageManager.idbManager.getAllFiles('/minetest/mods');
-                        // Delete each file
-                        for (const file of files) {
-                            await tempStorageManager.idbManager.deleteFile(file.path);
+                        // Use the proper StorageManager clearStorage method
+                        const success = await tempStorageManager.clearStorage('mods');
+                        if (success) {
+                            showInfo("All mod data has been cleared");
+                            await updateStorageStats();
                         }
-                        showInfo(`Deleted ${files.length} mod files`);
-                        await updateStorageStats();
                     } catch (e) {
                         console.error("Error clearing mods storage:", e);
                         showError("Failed to clear mods storage");
@@ -679,26 +683,18 @@
             clearAllBtn.addEventListener('click', async () => {
                 const confirmed = await showConfirm('Are you sure you want to clear ALL saved data (worlds and mods)?', 'Clear All Data', 'Cancel');
                 if (confirmed) {
-                    if (!tempStorageManager || !tempStorageManager.idbManager) {
+                    if (!tempStorageManager) {
                         showError("Storage manager not available");
                         return;
                     }
                     
                     try {
-                        // Clear worlds
-                        const worldFiles = await tempStorageManager.idbManager.getAllFiles('/minetest/worlds');
-                        for (const file of worldFiles) {
-                            await tempStorageManager.idbManager.deleteFile(file.path);
+                        // Use the forceClearStorage method for a complete reset
+                        const success = await tempStorageManager.clearStorage('all', true);
+                        if (success) {
+                            showInfo("All game data has been completely cleared");
+                            await updateStorageStats();
                         }
-                        
-                        // Clear mods
-                        const modFiles = await tempStorageManager.idbManager.getAllFiles('/minetest/mods');
-                        for (const file of modFiles) {
-                            await tempStorageManager.idbManager.deleteFile(file.path);
-                        }
-                        
-                        showInfo(`Deleted ${worldFiles.length + modFiles.length} files`);
-                        await updateStorageStats();
                     } catch (e) {
                         console.error("Error clearing all storage:", e);
                         showError("Failed to clear storage");
