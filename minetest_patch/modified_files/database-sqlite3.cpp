@@ -119,7 +119,6 @@ Database_SQLite3::Database_SQLite3(const std::string &savedir, const std::string
 	m_savedir(savedir),
 	m_dbname(dbname)
 {
-	// notify_file_modified(m_savedir + DIR_DELIM + m_dbname + ".sqlite");
 }
 
 void Database_SQLite3::beginSave()
@@ -136,7 +135,9 @@ void Database_SQLite3::endSave()
 	SQLRES(sqlite3_step(m_stmt_end), SQLITE_DONE,
 		"Failed to commit SQLite3 transaction");
 	sqlite3_reset(m_stmt_end);
-	// notify_file_modified(m_savedir + DIR_DELIM + m_dbname + ".sqlite");
+
+	std::string dbp = m_savedir + DIR_DELIM + m_dbname + ".sqlite";
+	notify_file_modified(dbp);
 }
 
 void Database_SQLite3::openDatabase()
@@ -165,6 +166,7 @@ void Database_SQLite3::openDatabase()
 
 	if (needs_create) {
 		createDatabase();
+		notify_file_modified(dbp);
 	}
 
 	std::string query_str = std::string("PRAGMA synchronous = ")
@@ -587,6 +589,10 @@ bool PlayerDatabaseSQLite3::removePlayer(const std::string &name)
 	str_to_sqlite(m_stmt_player_remove, 1, name);
 	sqlite3_vrfy(sqlite3_step(m_stmt_player_remove), SQLITE_DONE);
 	sqlite3_reset(m_stmt_player_remove);
+
+	std::string dbp = m_savedir + DIR_DELIM + m_dbname + ".sqlite";
+	notify_file_modified(dbp);
+
 	return true;
 }
 
@@ -736,6 +742,11 @@ bool AuthDatabaseSQLite3::deleteAuth(const std::string &name)
 
 	// privileges deleted by foreign key on delete cascade
 
+	if (changes > 0) {
+		std::string dbp = m_savedir + DIR_DELIM + m_dbname + ".sqlite";
+		notify_file_modified(dbp);
+	}
+
 	return changes > 0;
 }
 
@@ -765,6 +776,9 @@ void AuthDatabaseSQLite3::writePrivileges(const AuthEntry &authEntry)
 		sqlite3_vrfy(sqlite3_step(m_stmt_write_privs), SQLITE_DONE);
 		sqlite3_reset(m_stmt_write_privs);
 	}
+
+	std::string dbp = m_savedir + DIR_DELIM + m_dbname + ".sqlite";
+	notify_file_modified(dbp);
 }
 
 ModStorageDatabaseSQLite3::ModStorageDatabaseSQLite3(const std::string &savedir):
@@ -897,6 +911,9 @@ bool ModStorageDatabaseSQLite3::setModEntry(const std::string &modname,
 
 	sqlite3_reset(m_stmt_set);
 
+	std::string dbp = m_savedir + DIR_DELIM + m_dbname + ".sqlite";
+	notify_file_modified(dbp);
+
 	return true;
 }
 
@@ -913,6 +930,9 @@ bool ModStorageDatabaseSQLite3::removeModEntry(const std::string &modname,
 
 	sqlite3_reset(m_stmt_remove);
 
+	std::string dbp = m_savedir + DIR_DELIM + m_dbname + ".sqlite";
+	notify_file_modified(dbp);
+
 	return changes > 0;
 }
 
@@ -925,6 +945,9 @@ bool ModStorageDatabaseSQLite3::removeModEntries(const std::string &modname)
 	int changes = sqlite3_changes(m_database);
 
 	sqlite3_reset(m_stmt_remove_all);
+
+	std::string dbp = m_savedir + DIR_DELIM + m_dbname + ".sqlite";
+	notify_file_modified(dbp);
 
 	return changes > 0;
 }

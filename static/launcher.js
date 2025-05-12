@@ -244,101 +244,9 @@ class LaunchScheduler {
 const mtScheduler = new LaunchScheduler();
 
 // --- START WasmFS Persistence Logic ---
-let persistenceInitialized = false;
 let idbManager = null; // Will be instance of IDBManager
 let storageManager = null; // Will be instance of StorageManager
 let lastKnownMtimes = new Map(); // path -> mtime (timestamp)
-const WORLDS_SYNC_BASE_PATH = '/minetest/worlds'; // Only sync this subtree
-
-async function initialLoadFromIDB() {
-    if (!Module.FS || !idbManager) {
-        console.error('initialLoadFromIDB: Module.FS or IDBManager not available.');
-        return Promise.reject('FS or IDBManager not ready');
-    }
-    console.log('WasmFS_IDB: Starting initial load from IndexedDB for path: ' + WORLDS_SYNC_BASE_PATH);
-    try {
-        const files = await idbManager.getAllFiles(WORLDS_SYNC_BASE_PATH);
-        if (files.length === 0) {
-            console.log('WasmFS_IDB: No files found in IndexedDB under ' + WORLDS_SYNC_BASE_PATH + ' to preload.');
-            return;
-        }
-        console.log(`WasmFS_IDB: Found ${files.length} file(s) in IndexedDB under ${WORLDS_SYNC_BASE_PATH} to load into WasmFS.`);
-
-        for (const file of files) {
-            try {
-                // Ensure directory exists in WasmFS
-                const dir = file.path.substring(0, file.path.lastIndexOf('/'));
-                if (dir && !Module.FS.analyzePath(dir).exists) {
-                    Module.FS.mkdirTree(dir);
-                    // console.log('WasmFS_IDB: Created directory in WasmFS: ' + dir);
-                }
-                console.log("Writing file to WasmFS:", file.path, "size:", file.content.length);
-                Module.FS.writeFile(file.path, file.content); // content is Uint8Array
-                lastKnownMtimes.set(file.path, file.mtime.getTime()); // Store original mtime
-                // console.log('WasmFS_IDB: Loaded file from IDB to WasmFS: ' + file.path);
-
-                // Optionally, try to set mtime/atime if FS.utime is available and works
-                // This is often not fully supported or might not behave as expected.
-                // if (Module.FS.utime) {
-                //     try {
-                //         Module.FS.utime(file.path, file.atime.getTime(), file.mtime.getTime());
-                //     } catch (e) {
-                //         console.warn('WasmFS_IDB: Could not set mtime/atime for ', file.path, e);
-                //     }
-                // }
-            } catch (e) {
-                console.error('WasmFS_IDB: Error writing file to WasmFS:', file.path, e);
-            }
-        }
-        console.log('WasmFS_IDB: Finished loading files from IndexedDB into WasmFS.');
-    } catch (e) {
-        console.error('WasmFS_IDB: Error during initial load from IndexedDB:', e);
-        throw e; // Re-throw to be caught by initializePersistentFS
-    }
-}
-
-async function initializePersistentFS(callback) {
-    console.log('WasmFS_IDB: Attempting to initialize persistent storage using IndexedDB.');
-    
-    if (!idbManager) {
-        idbManager = new IDBManager(); // Assuming IDBManager is globally available via idb.js
-    }
-
-    try {
-        await idbManager.initDB();
-        console.log('WasmFS_IDB: IndexedDB initialized.');
-
-        // Ensure base WORLDS_DIR and WORLDS_DIR + '/worlds' exist in WasmFS (Minetest might create these anyway)
-        // This is more for sanity checking and ensuring our sync logic has a base to scan.
-        if (Module && Module.FS) {
-            if (!Module.FS.analyzePath(WORLDS_DIR).exists) {
-                Module.FS.mkdirTree(WORLDS_DIR);
-                console.log('WasmFS_IDB: Created base directory in WasmFS: ' + WORLDS_DIR);
-            }
-            const fullWorldsPath = WORLDS_DIR + '/worlds'; // This is WORLDS_SYNC_BASE_PATH
-            if (!Module.FS.analyzePath(fullWorldsPath).exists) {
-                Module.FS.mkdirTree(fullWorldsPath);
-                console.log('WasmFS_IDB: Created worlds subdirectory in WasmFS: ' + fullWorldsPath);
-            }
-        } else {
-            console.error('WasmFS_IDB: Module.FS not available for directory pre-creation.');
-            // Continue, as initialLoadFromIDB will also check Module.FS
-        }
-
-        await initialLoadFromIDB(); // Load data from IDB into WasmFS
-
-        persistenceInitialized = true;
-        console.log('WasmFS_IDB: Initial persistence setup complete. Files loaded from IDB to WasmFS.');
-        if (callback) callback(null);
-
-    } catch (e) {
-        console.error('WasmFS_IDB: Error during IndexedDB persistence setup: ', e);
-        persistenceInitialized = false; 
-        if (callback) callback(e);
-    }
-}
-
-// --- END WasmFS Persistence Logic ---
 
 function loadIDBScript(callback) {
     // If already loaded, just run callback
@@ -532,6 +440,8 @@ function consolePrint(text) {
     }
 }
 
+const fileUpdateTimeouts = new Map();
+
 var Module = {
     preRun: [],
     postRun: [],
@@ -560,23 +470,33 @@ var Module = {
     onFileChange: function(path) {
         // Normalize the path before processing
         path = normalizePath(path);
-        const statResult = FS.stat(path);
-        const isDirectory = (statResult.mode & 16384) === 16384;
 
-        if ((path.startsWith('/minetest/worlds/') || path.startsWith('/minetest/mods/')) && (typeof storageManager !== 'undefined' && storageManager)) {
+        // if ((path.startsWith('/minetest/worlds/') || path.startsWith('/minetest/mods/')) && (typeof storageManager !== 'undefined' && storageManager)) {
+        if (path.startsWith('/minetest/worlds/') && typeof storageManager !== 'undefined' && storageManager) {
             console.log("File changed:", path);
             // For directories, we just need to ensure they exist in IndexedDB
-            if (isDirectory) {
-                storageManager.ensureDirectoryExists(path);
-            } else {
-                // For files, read from WASMFS and persist to IndexedDB
-                try {
-                    const content = FS.readFile(path, { encoding: 'binary' });
-                    storageManager.persistFile(path, content);
-                } catch (e) {
-                    console.error("Error persisting file:", path, e);
-                }
+
+            let timeout = fileUpdateTimeouts.get(path);
+            if (timeout) {
+                clearTimeout(timeout);
             }
+
+            timeout = setTimeout(() => {
+                const statResult = FS.stat(path);
+                const isDirectory = (statResult.mode & 16384) === 16384;
+                if (isDirectory) {
+                    storageManager.ensureDirectoryExists(path);
+                } else {
+                    // For files, read from WASMFS and persist to IndexedDB
+                    try {
+                        const content = FS.readFile(path, { encoding: 'binary' });
+                        storageManager.persistFile(path, content);
+                    } catch (e) {
+                        console.error("Error persisting file:", path, e);
+                    }
+                }
+            }, 1000);
+            fileUpdateTimeouts.set(path, timeout);
         }
     },
 
@@ -994,7 +914,7 @@ class MinetestLauncher {
     // This must be called from a keyboard or mouse event handler,
     // after the 'onready' event has fired. (For this reason, it cannot
     // be called from the `onready` handler)
-    launch(args, storageOptions = { policy: 'no-storage' }) {
+    async launch(args, storageOptions = { policy: 'no-storage' }) {
         if (!this.isReady()) {
             throw new Error("launch called before onready");
         }
@@ -1012,7 +932,7 @@ class MinetestLauncher {
         // Initialize StorageManager if available
         if (storageManager) {
             // This will happen asynchronously but we're not waiting for it
-            storageManager.initialize(storageOptions, Module.FS)
+            await storageManager.initialize(storageOptions, Module.FS)
                 .then(() => {
                     console.log('StorageManager initialized successfully with policy:', storageOptions.policy);
                 })

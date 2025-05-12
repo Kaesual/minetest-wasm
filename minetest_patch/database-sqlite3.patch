@@ -1,5 +1,5 @@
---- minetest/src/database/database-sqlite3.cpp	2025-05-12 15:16:01.197416868 +0200
-+++ minetest/src/database/database-sqlite3.cpp	2025-05-12 15:12:56.803510408 +0200
+--- minetest/src/database/database-sqlite3.cpp	2025-05-13 00:27:31.121594934 +0200
++++ minetest/src/database/database-sqlite3.cpp	2025-05-12 21:04:35.708324216 +0200
 @@ -38,6 +38,7 @@
  #include "server/player_sao.h"
  
@@ -8,19 +8,84 @@
  
  // When to print messages when the database is being held locked by another process
  // Note: I've seen occasional delays of over 250ms while running minetestmapper.
-@@ -118,6 +119,7 @@
- 	m_savedir(savedir),
- 	m_dbname(dbname)
- {
-+	notify_file_modified(m_savedir + DIR_DELIM + m_dbname + ".sqlite");
- }
- 
- void Database_SQLite3::beginSave()
-@@ -134,6 +136,7 @@
+@@ -134,6 +135,9 @@
  	SQLRES(sqlite3_step(m_stmt_end), SQLITE_DONE,
  		"Failed to commit SQLite3 transaction");
  	sqlite3_reset(m_stmt_end);
-+	// notify_file_modified(m_savedir + DIR_DELIM + m_dbname + ".sqlite");
++
++	std::string dbp = m_savedir + DIR_DELIM + m_dbname + ".sqlite";
++	notify_file_modified(dbp);
  }
  
  void Database_SQLite3::openDatabase()
+@@ -162,6 +166,7 @@
+ 
+ 	if (needs_create) {
+ 		createDatabase();
++		notify_file_modified(dbp);
+ 	}
+ 
+ 	std::string query_str = std::string("PRAGMA synchronous = ")
+@@ -584,6 +589,10 @@
+ 	str_to_sqlite(m_stmt_player_remove, 1, name);
+ 	sqlite3_vrfy(sqlite3_step(m_stmt_player_remove), SQLITE_DONE);
+ 	sqlite3_reset(m_stmt_player_remove);
++
++	std::string dbp = m_savedir + DIR_DELIM + m_dbname + ".sqlite";
++	notify_file_modified(dbp);
++
+ 	return true;
+ }
+ 
+@@ -733,6 +742,11 @@
+ 
+ 	// privileges deleted by foreign key on delete cascade
+ 
++	if (changes > 0) {
++		std::string dbp = m_savedir + DIR_DELIM + m_dbname + ".sqlite";
++		notify_file_modified(dbp);
++	}
++
+ 	return changes > 0;
+ }
+ 
+@@ -762,6 +776,9 @@
+ 		sqlite3_vrfy(sqlite3_step(m_stmt_write_privs), SQLITE_DONE);
+ 		sqlite3_reset(m_stmt_write_privs);
+ 	}
++
++	std::string dbp = m_savedir + DIR_DELIM + m_dbname + ".sqlite";
++	notify_file_modified(dbp);
+ }
+ 
+ ModStorageDatabaseSQLite3::ModStorageDatabaseSQLite3(const std::string &savedir):
+@@ -894,6 +911,9 @@
+ 
+ 	sqlite3_reset(m_stmt_set);
+ 
++	std::string dbp = m_savedir + DIR_DELIM + m_dbname + ".sqlite";
++	notify_file_modified(dbp);
++
+ 	return true;
+ }
+ 
+@@ -910,6 +930,9 @@
+ 
+ 	sqlite3_reset(m_stmt_remove);
+ 
++	std::string dbp = m_savedir + DIR_DELIM + m_dbname + ".sqlite";
++	notify_file_modified(dbp);
++
+ 	return changes > 0;
+ }
+ 
+@@ -923,6 +946,9 @@
+ 
+ 	sqlite3_reset(m_stmt_remove_all);
+ 
++	std::string dbp = m_savedir + DIR_DELIM + m_dbname + ".sqlite";
++	notify_file_modified(dbp);
++
+ 	return changes > 0;
+ }
+ 

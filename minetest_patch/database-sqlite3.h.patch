@@ -1,0 +1,22 @@
+--- minetest/src/database/database-sqlite3.h	2025-05-13 00:27:31.121594934 +0200
++++ minetest/src/database/database-sqlite3.h	2025-05-12 17:27:17.250891354 +0200
+@@ -123,15 +123,16 @@
+ 	virtual void initStatements() = 0;
+ 
+ 	sqlite3 *m_database = nullptr;
++
++	// Moved to protected, so it can be accessed by the derived classes
++	std::string m_savedir = "";
++	std::string m_dbname = "";
+ private:
+ 	// Open the database
+ 	void openDatabase();
+ 
+ 	bool m_initialized = false;
+ 
+-	std::string m_savedir = "";
+-	std::string m_dbname = "";
+-
+ 	sqlite3_stmt *m_stmt_begin = nullptr;
+ 	sqlite3_stmt *m_stmt_end = nullptr;
+ 

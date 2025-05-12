@@ -1,5 +1,5 @@
---- minetest/src/filesys.cpp	2025-05-12 15:16:01.198416862 +0200
-+++ minetest/src/filesys.cpp	2025-05-12 14:26:59.447164472 +0200
+--- minetest/src/filesys.cpp	2025-05-13 00:27:31.122594931 +0200
++++ minetest/src/filesys.cpp	2025-05-12 23:38:54.980292652 +0200
 @@ -28,6 +28,7 @@
  #include "log.h"
  #include "config.h"
@@ -36,7 +36,25 @@
  	return true;
  }
  
-@@ -282,15 +287,15 @@
+@@ -175,11 +180,17 @@
+ 	if(!is_directory)
+ 	{
+ 		bool did = DeleteFile(path.c_str());
++		if (did) {
++			notify_file_deleted(path);
++		}
+ 		return did;
+ 	}
+ 	else
+ 	{
+ 		bool did = RemoveDirectory(path.c_str());
++		if (did) {
++			notify_file_deleted(path);
++		}
+ 		return did;
+ 	}
+ }
+@@ -282,15 +293,15 @@
  bool CreateDir(const std::string &path)
  {
  	int r = mkdir(path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
@@ -55,7 +73,7 @@
  }
  
  bool PathExists(const std::string &path)
-@@ -333,6 +338,7 @@
+@@ -333,6 +344,7 @@
  					<< path << std::endl;
  			return false;
  		}
@@ -63,7 +81,7 @@
  		return true;
  	}
  	infostream << "RecursiveDelete: Deleting content of directory "
-@@ -352,6 +358,7 @@
+@@ -352,6 +364,7 @@
  				<< path << std::endl;
  		return false;
  	}
@@ -71,7 +89,56 @@
  	return true;
  }
  
-@@ -851,6 +858,7 @@
+@@ -408,6 +421,9 @@
+ 		if (!did)
+ 			errorstream << "rmdir errno: " << errno << ": " << strerror(errno)
+ 					<< std::endl;
++		if (did) {
++			notify_file_deleted(path);
++		}
+ 		return did;
+ 	}
+ 
+@@ -415,6 +431,9 @@
+ 	if (!did)
+ 		errorstream << "unlink errno: " << errno << ": " << strerror(errno)
+ 				<< std::endl;
++	if (did) {
++		notify_file_deleted(path);
++	}
+ 	return did;
+ }
+ 
+@@ -572,6 +591,9 @@
+ 		<<source<<" to "<<target<<std::endl;
+ 	fclose(sourcefile);
+ 	fclose(targetfile);
++	if (retval) {
++		notify_file_modified(target);
++	}
+ 	return retval;
+ }
+ 
+@@ -598,6 +620,9 @@
+ 				}
+ 			}
+ 		}
++		if (retval) {
++			notify_file_modified(target);
++		}
+ 		return retval;
+ 	}
+ 
+@@ -617,6 +642,8 @@
+ 		}
+ 	}
+ 
++	// Todo: notify_file_deleted(source), but recursive update for moved files
++
+ 	// Try renaming first which is instant
+ 	if (fs::Rename(source, target))
+ 		return true;
+@@ -851,6 +878,7 @@
  		return false;
  	}
  
@@ -79,7 +146,16 @@
  	return true;
  }
  
-@@ -932,7 +940,12 @@
+@@ -909,6 +937,8 @@
+ 			}
+ 			total_read += bytes_read;
+ 		}
++
++		notify_file_modified(fullpath);
+ 	}
+ 
+ 	return true;
+@@ -932,7 +962,12 @@
  
  bool Rename(const std::string &from, const std::string &to)
  {

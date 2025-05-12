@@ -35,8 +35,9 @@ if ! $INCREMENTAL; then
       cp "$BASE_DIR/minetest_patch/notify_fs.h" "$SOURCES_DIR/minetest/src/notify_fs.h"
       pushd "$SOURCES_DIR"
       patch -p0 < "$BASE_DIR/minetest_patch/filesys.patch"
-      # patch -p0 < "$BASE_DIR/minetest_patch/database-files.patch"
-      # patch -p0 < "$BASE_DIR/minetest_patch/database-sqlite3.patch"
+      patch -p0 < "$BASE_DIR/minetest_patch/database-files.patch"
+      patch -p0 < "$BASE_DIR/minetest_patch/database-sqlite3.patch"
+      patch -p0 < "$BASE_DIR/minetest_patch/database-sqlite3.h.patch"
       patch -p0 < "$BASE_DIR/minetest_patch/CMakeLists.patch"
       popd
     fi

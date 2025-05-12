@@ -336,6 +336,7 @@
             
             <p>Known issues:</p>
             <ul style="margin-left: 20px; list-style-type: disc;">
+                <li>Downloading Mods is not yet persistent, so you need to download them again if you restart the game.</li>
                 <li>If you're spinning very fast when capturing the mouse, try to play in fullscreen mode instead. Just click the fullscreen icon in the community sidebar.</li>
             </ul>
             
@@ -343,7 +344,7 @@
                 <h3 style="font-size: 1.4rem; margin-bottom: 15px;">Updates</h3>
                 <p><strong>11.05.2025</strong></p>
                 <ul class="simple_list">
-                    <li>Added persistent storage support with IndexedDB to save your worlds and mods.</li>
+                    <li>Added persistent storage support with IndexedDB to save your worlds.</li>
                     <li>Enhanced local storage management with statistics and cleanup tools.</li>
                 </ul>
 
@@ -389,7 +390,7 @@
                     <label>Storage Options:</label>
                     <div>
                         <input type="radio" id="storage_indexeddb" name="storage_type" value="indexeddb" checked>
-                        <label for="storage_indexeddb">IndexedDB (save worlds & mods in browser)</label>
+                        <label for="storage_indexeddb">IndexedDB (save worlds in browser)</label>
                         <div id="storage_stats" class="storage-stats">
                             <h4>Storage Usage</h4>
                             <table>
@@ -722,42 +723,38 @@
                     launchBtn.textContent = 'Loading saved worlds...';
                     tcon_print("", "Loading saved data from IndexedDB...");
                     
-                    // Pre-load worlds data into Module.FS before starting the game
-                    try {
-                        // Create a temporary manager just for preloading
-                        const preloadManager = new StorageManager();
-                        preloadManager.idbManager = new IDBManager();
-                        await preloadManager.idbManager.initDB();
+                    // // Pre-load worlds data into Module.FS before starting the game
+                    // try {
+                    //     // Create a temporary manager just for preloading
+                    //     const preloadManager = new StorageManager();
+                    //     preloadManager.idbManager = new IDBManager();
+                    //     await preloadManager.idbManager.initDB();
                         
-                        // Get reference to Module.FS
-                        const fs = mtl.getFS();
-                        if (fs) {
-                            preloadManager.fs = fs;
-                            preloadManager.storagePolicy = 'indexeddb';
+                    //     // Get reference to Module.FS
+                    //     const fs = mtl.getFS();
+                    //     if (fs) {
+                    //         preloadManager.fs = fs;
+                    //         preloadManager.storagePolicy = 'indexeddb';
                             
-                            // Create necessary directories
-                            const worldsPath = '/minetest/worlds';
-                            const modsPath = '/minetest/mods';
+                    //         // Create necessary directories
+                    //         const worldsPath = '/minetest/worlds';
+                    //         const modsPath = '/minetest/mods';
                             
-                            if (!fs.analyzePath(worldsPath).exists) {
-                                fs.mkdirTree(worldsPath);
-                            }
-                            if (!fs.analyzePath(modsPath).exists) {
-                                fs.mkdirTree(modsPath);
-                            }
+                    //         if (!fs.analyzePath(worldsPath).exists) {
+                    //             fs.mkdirTree(worldsPath);
+                    //         }
+                    //         if (!fs.analyzePath(modsPath).exists) {
+                    //             fs.mkdirTree(modsPath);
+                    //         }
                             
-                            // Load worlds and mods from IndexedDB
-                            await preloadManager.initialLoadFromIDB(worldsPath);
-                            await preloadManager.initialLoadFromIDB(modsPath);
-                            
-                            tcon_print("", "Successfully loaded saved data!");
-                        } else {
-                            tcon_print("", "Warning: Unable to preload data, Module.FS not available yet");
-                        }
-                    } catch (e) {
-                        console.error("Error preloading data:", e);
-                        tcon_print("", "Warning: Error preloading saved data: " + e.message);
-                    }
+                    //         tcon_print("", "Successfully loaded saved data!");
+                    //     } else {
+                    //         tcon_print("", "Warning: Unable to preload data, Module.FS not available yet");
+                    //     }
+                    // } catch (e) {
+                    //     console.error("Error preloading data:", e);
+                    //     tcon_print("", "Warning: Error preloading saved data: " + e.message);
+                    // }
                 }
                 
                 wipePage();

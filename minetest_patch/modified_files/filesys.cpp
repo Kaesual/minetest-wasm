@@ -180,11 +180,17 @@ bool DeleteSingleFileOrEmptyDirectory(const std::string &path)
 	if(!is_directory)
 	{
 		bool did = DeleteFile(path.c_str());
+		if (did) {
+			notify_file_deleted(path);
+		}
 		return did;
 	}
 	else
 	{
 		bool did = RemoveDirectory(path.c_str());
+		if (did) {
+			notify_file_deleted(path);
+		}
 		return did;
 	}
 }
@@ -415,6 +421,9 @@ bool DeleteSingleFileOrEmptyDirectory(const std::string &path)
 		if (!did)
 			errorstream << "rmdir errno: " << errno << ": " << strerror(errno)
 					<< std::endl;
+		if (did) {
+			notify_file_deleted(path);
+		}
 		return did;
 	}
 
@@ -422,6 +431,9 @@ bool DeleteSingleFileOrEmptyDirectory(const std::string &path)
 	if (!did)
 		errorstream << "unlink errno: " << errno << ": " << strerror(errno)
 				<< std::endl;
+	if (did) {
+		notify_file_deleted(path);
+	}
 	return did;
 }
 
@@ -579,6 +591,9 @@ bool CopyFileContents(const std::string &source, const std::string &target)
 		<<source<<" to "<<target<<std::endl;
 	fclose(sourcefile);
 	fclose(targetfile);
+	if (retval) {
+		notify_file_modified(target);
+	}
 	return retval;
 }
 
@@ -605,6 +620,9 @@ bool CopyDir(const std::string &source, const std::string &target)
 				}
 			}
 		}
+		if (retval) {
+			notify_file_modified(target);
+		}
 		return retval;
 	}
 
@@ -623,6 +641,8 @@ bool MoveDir(const std::string &source, const std::string &target)
 			return false;
 		}
 	}
+
+	// Todo: notify_file_deleted(source), but recursive update for moved files
 
 	// Try renaming first which is instant
 	if (fs::Rename(source, target))
@@ -917,6 +937,8 @@ bool extractZipFile(io::IFileSystem *fs, const char *filename, const std::string
 			}
 			total_read += bytes_read;
 		}
+
+		notify_file_modified(fullpath);
 	}
 
 	return true;
