@@ -1,16 +1,14 @@
 class StorageManager {
     constructor() {
-        this.storagePolicy = 'no-storage'; // 'no-storage', 'indexeddb', 'directory'
-        this.directoryHandle = null;
+        this.storagePolicy = 'no-storage'; // 'no-storage' or 'indexeddb'
         this.idbManager = null; // Instance of IDBManager (from idb.js)
         this.lastKnownMtimesIDB = new Map(); // For IndexedDB: path -> mtime (timestamp)
-        this.lastKnownMtimesDir = new Map(); // For Directory: path -> mtime (timestamp)
         this.fs = null; // Reference to Module.FS
 
         this.WORLDS_SYNC_BASE_PATH = '/minetest/worlds';
         this.MODS_SYNC_BASE_PATH = '/minetest/mods'; // Assuming this is the target in WasmFS
 
-        this.SYNC_INTERVAL = 10000; // 10 seconds (decreased from 30 seconds)
+        this.SYNC_INTERVAL = 10000; // 10 seconds
         this.syncIntervalId = null;
         
         // Statistics tracking
@@ -37,8 +35,8 @@ class StorageManager {
 
         console.log(`StorageManager: Initializing with policy - ${this.storagePolicy}`);
 
-        if (!this.fs && (this.storagePolicy === 'indexeddb' || this.storagePolicy === 'directory')) {
-            console.error('StorageManager: Module.FS is required for IndexedDB or Directory storage but not provided.');
+        if (!this.fs && this.storagePolicy === 'indexeddb') {
+            console.error('StorageManager: Module.FS is required for IndexedDB storage but not provided.');
             showError('Storage error: Module.FS not available. Using no-storage mode.');
             this.storagePolicy = 'no-storage'; // Fallback or error
             return Promise.reject('Module.FS not available');
@@ -70,39 +68,6 @@ class StorageManager {
                 this.storagePolicy = 'no-storage'; // Fallback on error
                 return Promise.reject(e);
             }
-        } else if (this.storagePolicy === 'directory') {
-            if (!storageOptions.handle) {
-                console.error('StorageManager: Directory storage policy selected, but no directory handle provided.');
-                showError('Storage error: No directory handle provided. Using no-storage mode.');
-                this.storagePolicy = 'no-storage'; // Fallback
-                return Promise.reject('Directory handle not provided');
-            }
-            this.directoryHandle = storageOptions.handle;
-            console.log('StorageManager: Using directory handle:', this.directoryHandle.name);
-            
-            try {
-                // Verify permissions
-                const permission = await this.directoryHandle.requestPermission({ mode: 'readwrite' });
-                if (permission !== 'granted') {
-                    console.error('StorageManager: Directory permissions not granted');
-                    showError('Storage error: Directory permissions not granted. Using no-storage mode.');
-                    return Promise.reject('Directory permissions not granted');
-                }
-                
-                // Create necessary subdirectories in the handle
-                await this.ensureDirectoryExists(this.directoryHandle, 'worlds');
-                await this.ensureDirectoryExists(this.directoryHandle, 'mods');
-                
-                // Load from directory to WasmFS
-                await this.initialLoadFromDirectory();
-                await this.updateStorageStats();
-                showInfo('Storage: Directory loaded successfully');
-            } catch (e) {
-                console.error('StorageManager: Failed to initialize Directory backend.', e);
-                showError('Storage error: Failed to initialize directory storage. Using no-storage mode.');
-                this.storagePolicy = 'no-storage'; // Fallback
-                return Promise.reject(e);
-            }
         }
 
         if (this.storagePolicy !== 'no-storage') {
@@ -111,7 +76,7 @@ class StorageManager {
         return Promise.resolve();
     }
 
-    // --- IndexedDB Specific Methods (adapted from launcher.js) ---
+    // --- IndexedDB Specific Methods ---
     async initialLoadFromIDB(basePath) {
         if (!this.fs || !this.idbManager) {
             console.error('StorageManager-IDB: Module.FS or IDBManager not available for initial load.');
@@ -248,326 +213,6 @@ class StorageManager {
             }
         } catch (e) { 
             console.error('StorageManager-IDB: Error during WasmFS to IDB sync:', e); 
-        }
-    }
-
-    // --- Directory (File System API) Specific Methods ---
-    
-    // Helper function to ensure directory exists in the FileSystem API
-    async ensureDirectoryExists(parentHandle, dirName) {
-        try {
-            return await parentHandle.getDirectoryHandle(dirName, { create: true });
-        } catch (e) {
-            console.error(`StorageManager-Dir: Error creating directory ${dirName}:`, e);
-            throw e;
-        }
-    }
-
-    // Helper function to get directory handle with path parts
-    async getDirectoryFromPath(basePath) {
-        if (!this.directoryHandle) return null;
-        
-        // Extract path segments (basePath format: "/minetest/worlds/my_world")
-        const parts = basePath.split('/').filter(p => p); // Remove empty segments
-        
-        // For "/minetest/worlds" or "/minetest/mods" we need to determine which root folder
-        if (parts.length >= 2) {
-            if (parts[0] === 'minetest') {
-                let currentHandle = this.directoryHandle;
-                
-                // Navigate to worlds or mods folder
-                try {
-                    if (parts[1] === 'worlds') {
-                        currentHandle = await this.ensureDirectoryExists(currentHandle, 'worlds');
-                        // Navigate further if needed
-                        for (let i = 2; i < parts.length; i++) {
-                            currentHandle = await this.ensureDirectoryExists(currentHandle, parts[i]);
-                        }
-                        return currentHandle;
-                    } else if (parts[1] === 'mods') {
-                        currentHandle = await this.ensureDirectoryExists(currentHandle, 'mods');
-                        // Navigate further if needed
-                        for (let i = 2; i < parts.length; i++) {
-                            currentHandle = await this.ensureDirectoryExists(currentHandle, parts[i]);
-                        }
-                        return currentHandle;
-                    }
-                } catch (e) {
-                    console.error('StorageManager-Dir: Error navigating to path:', basePath, e);
-                    return null;
-                }
-            }
-        }
-        
-        return null; // Invalid path or not found
-    }
-
-    async initialLoadFromDirectory() {
-        if (!this.fs || !this.directoryHandle) {
-            console.error('StorageManager-Dir: Module.FS or DirectoryHandle not available for initial load.');
-            return Promise.reject('FS or DirectoryHandle not ready for directory load');
-        }
-        
-        console.log('StorageManager-Dir: Starting initial load from Directory for paths: ' + 
-            this.WORLDS_SYNC_BASE_PATH + ' and ' + this.MODS_SYNC_BASE_PATH);
-        
-        // Make sure base directories exist in WasmFS
-        if (!this.fs.analyzePath(this.WORLDS_SYNC_BASE_PATH).exists) {
-            this.fs.mkdirTree(this.WORLDS_SYNC_BASE_PATH);
-        }
-        
-        if (!this.fs.analyzePath(this.MODS_SYNC_BASE_PATH).exists) {
-            this.fs.mkdirTree(this.MODS_SYNC_BASE_PATH);
-        }
-        
-        try {
-            // Create a root for worlds
-            const worldsHandle = await this.ensureDirectoryExists(this.directoryHandle, 'worlds');
-            await this.loadDirectoryToWasmFS(worldsHandle, this.WORLDS_SYNC_BASE_PATH);
-            
-            // Create a root for mods
-            const modsHandle = await this.ensureDirectoryExists(this.directoryHandle, 'mods');
-            await this.loadDirectoryToWasmFS(modsHandle, this.MODS_SYNC_BASE_PATH);
-            
-            console.log('StorageManager-Dir: Finished loading files from Directory into WasmFS.');
-        } catch (e) {
-            console.error('StorageManager-Dir: Error during initial load from Directory:', e);
-            throw e;
-        }
-    }
-
-    async loadDirectoryToWasmFS(dirHandle, targetPath) {
-        let filesLoaded = 0;
-        
-        const processDirectory = async (handle, currentPath) => {
-            for await (const [name, entry] of handle.entries()) {
-                const entryPath = `${currentPath}/${name}`;
-                
-                if (entry.kind === 'file') {
-                    try {
-                        const file = await entry.getFile();
-                        const content = new Uint8Array(await file.arrayBuffer());
-                        
-                        // Make sure parent directory exists in WasmFS
-                        const dir = entryPath.substring(0, entryPath.lastIndexOf('/'));
-                        if (!this.fs.analyzePath(dir).exists) {
-                            this.fs.mkdirTree(dir);
-                        }
-                        
-                        // Write the file to WasmFS
-                        this.fs.writeFile(entryPath, content);
-                        // Store mtime in milliseconds
-                        this.lastKnownMtimesDir.set(entryPath, file.lastModified);
-                        filesLoaded++;
-                        
-                    } catch (e) {
-                        console.error(`StorageManager-Dir: Error loading file ${entryPath}:`, e);
-                    }
-                } else if (entry.kind === 'directory') {
-                    // Create directory in WasmFS if it doesn't exist
-                    if (!this.fs.analyzePath(entryPath).exists) {
-                        this.fs.mkdirTree(entryPath);
-                    }
-                    // Process subdirectory recursively
-                    await processDirectory(entry, entryPath);
-                }
-            }
-        };
-        
-        await processDirectory(dirHandle, targetPath);
-        console.log(`StorageManager-Dir: Loaded ${filesLoaded} files from Directory to WasmFS.`);
-    }
-
-    async persistToDirectory() {
-        if (!this.fs || !this.directoryHandle) return;
-        
-        const syncStartTime = performance.now();
-        let filesProcessed = 0, filesSynced = 0, filesDeleted = 0;
-        let worldsFilesSynced = 0, modsFilesSynced = 0;
-        let totalSyncedSize = 0; // Track total size of synced files
-        
-        // Track existing files in WasmFS
-        const existingPaths = new Set();
-        
-        // Map to store directory file paths for deletion check
-        const directoryFilePaths = new Map(); // path -> FileHandle
-        
-        // Helper to scan directory structure in local filesystem
-        const scanLocalDirectory = async (dirHandle, basePath) => {
-            for await (const [name, entry] of dirHandle.entries()) {
-                const relativePath = basePath + '/' + name;
-                if (entry.kind === 'file') {
-                    directoryFilePaths.set(relativePath, entry);
-                } else if (entry.kind === 'directory') {
-                    await scanLocalDirectory(entry, relativePath);
-                }
-            }
-        };
-        
-        // Scan local directory to get file map
-        try {
-            const worldsHandle = await this.directoryHandle.getDirectoryHandle('worlds', { create: true });
-            await scanLocalDirectory(worldsHandle, this.WORLDS_SYNC_BASE_PATH);
-            
-            const modsHandle = await this.directoryHandle.getDirectoryHandle('mods', { create: true });
-            await scanLocalDirectory(modsHandle, this.MODS_SYNC_BASE_PATH);
-        } catch (e) {
-            console.error('StorageManager-Dir: Error scanning local directory structure:', e);
-        }
-        
-        // Convert WasmFS path to directory path parts and write file
-        const writeToDirectoryHandle = async (wasmPath, content) => {
-            try {
-                // Extract target directory path
-                const parts = wasmPath.split('/').filter(p => p);
-                const fileName = parts.pop(); // Last part is the filename
-                
-                // Determine if we're handling worlds or mods
-                const isWorlds = parts.length >= 2 && parts[0] === 'minetest' && parts[1] === 'worlds';
-                const isMods = parts.length >= 2 && parts[0] === 'minetest' && parts[1] === 'mods';
-                
-                if (!isWorlds && !isMods) {
-                    console.warn(`StorageManager-Dir: Path ${wasmPath} not in worlds or mods directory, skipping`);
-                    return;
-                }
-                
-                // Start from appropriate root
-                let dirHandle = isWorlds ? 
-                    await this.ensureDirectoryExists(this.directoryHandle, 'worlds') :
-                    await this.ensureDirectoryExists(this.directoryHandle, 'mods');
-                
-                // Navigate to target directory (skip minetest/worlds or minetest/mods)
-                for (let i = 2; i < parts.length; i++) {
-                    dirHandle = await this.ensureDirectoryExists(dirHandle, parts[i]);
-                }
-                
-                // Write the file
-                const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
-                const writable = await fileHandle.createWritable();
-                await writable.write(content);
-                await writable.close();
-                
-                const fileSize = content.length || 0;
-                totalSyncedSize += fileSize;
-                filesSynced++;
-                
-                // Track which area got synced
-                if (isWorlds) {
-                    worldsFilesSynced++;
-                } else if (isMods) {
-                    modsFilesSynced++;
-                }
-                
-                return true;
-                
-            } catch (e) {
-                console.error(`StorageManager-Dir: Error writing file ${wasmPath} to directory:`, e);
-                return false;
-            }
-        };
-        
-        // Scan WasmFS directory recursively
-        const scanDirectoryDir = async (currentPath) => {
-            let entries;
-            try { 
-                entries = this.fs.readdir(currentPath); 
-            } catch (e) { 
-                // Handle as file instead of directory
-                try {
-                    const stat = this.fs.stat(currentPath);
-                    filesProcessed++;
-                    const currentMtimeMs = stat.mtime * 1000; 
-                    const knownMtimeMs = this.lastKnownMtimesDir.get(currentPath);
-                    
-                    // Mark path as existing in WasmFS
-                    existingPaths.add(currentPath);
-                    
-                    if (currentMtimeMs !== knownMtimeMs) {
-                        const content = this.fs.readFile(currentPath, { encoding: 'binary' });
-                        if (await writeToDirectoryHandle(currentPath, content)) {
-                            this.lastKnownMtimesDir.set(currentPath, currentMtimeMs);
-                        }
-                    }
-                    return;
-                } catch (statError) {
-                    console.error('StorageManager-Dir: Error stating WasmFS entry:', currentPath, e, statError);
-                    return;
-                }
-            }
-            
-            // Process directory entries
-            for (const entry of entries) {
-                if (entry === '.' || entry === '..') continue;
-                const fullPath = currentPath + (currentPath.endsWith('/') ? '' : '/') + entry;
-                await scanDirectoryDir(fullPath);
-            }
-        };
-        
-        try {
-            // Sync both worlds and mods directories
-            await scanDirectoryDir(this.WORLDS_SYNC_BASE_PATH);
-            await scanDirectoryDir(this.MODS_SYNC_BASE_PATH);
-            
-            // Delete files from directory that no longer exist in WasmFS
-            for (const [dirPath, fileHandle] of directoryFilePaths.entries()) {
-                if ((dirPath.startsWith(this.WORLDS_SYNC_BASE_PATH) || 
-                     dirPath.startsWith(this.MODS_SYNC_BASE_PATH)) && 
-                    !existingPaths.has(dirPath)) {
-                    
-                    try {
-                        // Get parent directory handle
-                        const parts = dirPath.split('/').filter(p => p);
-                        const fileName = parts.pop();
-                        
-                        // Start from root (worlds or mods)
-                        let parentDirHandle = parts[1] === 'worlds' ? 
-                            await this.directoryHandle.getDirectoryHandle('worlds', { create: false }) :
-                            await this.directoryHandle.getDirectoryHandle('mods', { create: false });
-                        
-                        // Navigate to the parent directory
-                        for (let i = 2; i < parts.length; i++) {
-                            parentDirHandle = await parentDirHandle.getDirectoryHandle(parts[i], { create: false });
-                        }
-                        
-                        // Remove the file
-                        await parentDirHandle.removeEntry(fileName);
-                        filesDeleted++;
-                        this.lastKnownMtimesDir.delete(dirPath);
-                    } catch (e) {
-                        console.error(`StorageManager-Dir: Error deleting file ${dirPath}:`, e);
-                    }
-                }
-            }
-            
-            const syncEndTime = performance.now();
-            const syncDuration = syncEndTime - syncStartTime;
-            this.syncTotalDuration += syncDuration;
-            this.syncCount++;
-            this.lastSyncTime = Date.now();
-            
-            // Format size for logging
-            const formatSize = (bytes) => {
-                if (bytes === 0) return '0 B';
-                const sizes = ['B', 'KB', 'MB', 'GB'];
-                const i = Math.floor(Math.log(bytes) / Math.log(1024));
-                return parseFloat((bytes / Math.pow(1024, i)).toFixed(2)) + ' ' + sizes[i];
-            };
-            
-            if (filesSynced > 0 || filesDeleted > 0) {
-                console.log(`StorageManager-Dir: Sync complete in ${syncDuration.toFixed(2)}ms. ${filesSynced}/${filesProcessed} files synced (${formatSize(totalSyncedSize)}), ${filesDeleted} files deleted.`);
-                
-                // Update stats after successful sync
-                await this.updateStorageStats();
-                
-                // Only show notification if we synced significant number of files (avoid spamming)
-                if (filesSynced >= 3 || filesDeleted > 0) {
-                    showInfo(`Game data saved: ${filesSynced} files (${formatSize(totalSyncedSize)}) synced, ${filesDeleted} files deleted to local directory`);
-                }
-            } else {
-                console.log(`StorageManager-Dir: Sync complete in ${syncDuration.toFixed(2)}ms. No changes detected.`);
-            }
-        } catch (e) { 
-            console.error('StorageManager-Dir: Error during WasmFS to Directory sync:', e); 
             throw e; // Let the main syncNow method handle the error
         }
     }
@@ -606,52 +251,6 @@ class StorageManager {
                 }
             } catch (e) {
                 console.error('StorageManager: Error calculating IndexedDB stats:', e);
-            }
-        } else if (this.storagePolicy === 'directory' && this.directoryHandle) {
-            try {
-                this.worldsStats.fileCount = 0;
-                this.worldsStats.totalSize = 0;
-                this.modsStats.fileCount = 0;
-                this.modsStats.totalSize = 0;
-                
-                // Helper function to recursively calculate size and count files in a directory
-                const calculateDirStats = async (dirHandle, isWorlds) => {
-                    const stats = isWorlds ? this.worldsStats : this.modsStats;
-                    
-                    for await (const [name, entry] of dirHandle.entries()) {
-                        if (entry.kind === 'file') {
-                            stats.fileCount++;
-                            try {
-                                const file = await entry.getFile();
-                                stats.totalSize += file.size;
-                            } catch (e) {
-                                console.error(`Error getting file size for ${name}:`, e);
-                            }
-                        } else if (entry.kind === 'directory') {
-                            await calculateDirStats(entry, isWorlds);
-                        }
-                    }
-                };
-                
-                // Calculate worlds stats
-                try {
-                    const worldsHandle = await this.directoryHandle.getDirectoryHandle('worlds', { create: false });
-                    await calculateDirStats(worldsHandle, true);
-                } catch (e) {
-                    // Worlds directory might not exist yet
-                    console.log('Worlds directory not found or empty');
-                }
-                
-                // Calculate mods stats
-                try {
-                    const modsHandle = await this.directoryHandle.getDirectoryHandle('mods', { create: false });
-                    await calculateDirStats(modsHandle, false);
-                } catch (e) {
-                    // Mods directory might not exist yet
-                    console.log('Mods directory not found or empty');
-                }
-            } catch (e) {
-                console.error('StorageManager: Error calculating directory stats:', e);
             }
         } else if (this.fs) {
             // Fallback to WasmFS calculation if we have no persistent storage but have the filesystem
@@ -806,8 +405,6 @@ class StorageManager {
         try {
             if (this.storagePolicy === 'indexeddb') {
                 await this.persistToIDB();
-            } else if (this.storagePolicy === 'directory') {
-                await this.persistToDirectory();
             }
         } catch (e) {
             console.error('StorageManager: Error during sync:', e);

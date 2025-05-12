@@ -571,7 +571,45 @@ function consolePrint(text) {
 }
 
 var Module = {
-    preRun: [],
+    preRun: [function() {
+        console.log('Setting up file write tracking...');
+        // Setup tracking delegate to monitor file write operations
+        if (typeof FS !== 'undefined' && FS && FS.trackingDelegate) {
+            // Keep track of recently written files to avoid multiple syncs for the same file in a short period
+            const recentWrites = new Map();
+            const WRITE_DEBOUNCE_TIME = 500; // ms
+
+            // Add tracking for file write operations
+            FS.trackingDelegate['onWriteToFile'] = function(path, bytesWritten) {
+                // if (bytesWritten > 0) {
+                //     // Check if this is a file we care about (worlds or mods directory)
+                //     if (path.startsWith('/minetest/worlds/') || path.startsWith('/minetest/mods/')) {
+                //         const now = Date.now();
+                //         recentWrites.set(path, now);
+                        
+                //         // Schedule a sync after a short debounce period
+                //         setTimeout(() => {
+                //             const writeTime = recentWrites.get(path);
+                //             if (writeTime && (now === writeTime)) {
+                //                 // Only sync if this is still the most recent write for this file
+                //                 recentWrites.delete(path);
+                //                 console.log(`File changed, syncing: ${path}`);
+                //                 if (storageManager) {
+                //                     storageManager.syncNow().catch(err => {
+                //                         console.error('Error syncing after file write:', err);
+                //                     });
+                //                 }
+                //             }
+                //         }, WRITE_DEBOUNCE_TIME);
+                //     }
+                // }
+                console.log('File written:', path, bytesWritten);
+            };
+            console.log('File write tracking set up successfully');
+        } else {
+            console.warn('FS.trackingDelegate is not available. File change detection will not work.');
+        }
+    }],
     postRun: [],
     print: consolePrint,
     canvas: (function() {
@@ -1013,11 +1051,6 @@ class MinetestLauncher {
 
         // Log the chosen storage options
         console.log("Storage policy selected:", storageOptions.policy);
-        if (storageOptions.policy === 'directory' && storageOptions.handle) {
-            console.log("Directory handle provided:", storageOptions.handle.name);
-        } else if (storageOptions.policy === 'directory' && !storageOptions.handle) {
-            console.warn("Directory storage policy selected, but no directory handle provided to launch(). This should not happen if UI logic is correct.");
-        }
         
         // Initialize StorageManager if available
         if (storageManager) {
@@ -1196,3 +1229,34 @@ window.addEventListener('beforeunload', async (event) => {
         }
     }
 });
+
+// Add function to handle game exit
+function handleGameExit() {
+    console.log("Game has exited");
+    
+    // Last sync before showing the manual sync button
+    if (storageManager) {
+        storageManager.syncNow().catch(err => {
+            console.error('Error during exit sync:', err);
+        });
+    }
+    
+    // Show the manual sync button
+    if (typeof showManualSyncButton === 'function') {
+        showManualSyncButton();
+    }
+}
+
+// Modify Module's quit function to handle game exit
+// var originalQuit = Module.quit;
+// Module.quit = function(status) {
+//     console.log("Module quit called with status:", status);
+    
+//     // Call the original quit function
+//     if (typeof originalQuit === 'function') {
+//         originalQuit(status);
+//     }
+    
+//     // Handle the game exit
+//     handleGameExit();
+// };

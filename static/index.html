@@ -297,6 +297,36 @@
                 height: 250px;
             }
         }
+
+        #sync-button-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: none;
+            z-index: 1000;
+        }
+        
+        #manual-sync-button {
+            padding: 10px 15px;
+            font-size: 16px;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        #manual-sync-button:hover {
+            background-color: #3367d6;
+        }
+        
+        #sync-status {
+            margin-top: 8px;
+            font-size: 14px;
+            text-align: center;
+            color: #333;
+        }
     </style>
     <script type="text/javascript" src="%__RELEASE_UUID__%/snackbar.js"></script>
     <script type="text/javascript" src="%__RELEASE_UUID__%/idb.js"></script>
@@ -398,11 +428,6 @@
                             </div>
                         </div>
                     </div>
-                    <div id="directory_option_container">
-                        <input type="radio" id="storage_directory" name="storage_type" value="directory">
-                        <label for="storage_directory">Local Directory (worlds & mods in local folder)</label>
-                        <button id="button_choose_directory" style="display: none; margin-top: 10px; background-color: #6c757d; padding: 10px; font-size: 0.9rem; height: auto;">Choose Game Directory</button>
-                    </div>
                     <div>
                         <input type="radio" id="storage_none" name="storage_type" value="no-storage">
                         <label for="storage_none">No storage (data lost on close)</label>
@@ -414,6 +439,10 @@
                 </div>
             </div>
         </div>
+    </div>
+    <div id="sync-button-container">
+        <button id="manual-sync-button">Sync Game Files</button>
+        <div id="sync-status"></div>
     </div>
     <script type="text/javascript" src="%__RELEASE_UUID__%/launcher.js"></script>
     <script type="text/javascript">
@@ -434,12 +463,6 @@
             isSandboxed = true;
             console.log("Running in a sandboxed iframe environment");
         }
-        
-        // If we can't use the File System API (in sandboxed iframe), hide or disable that option
-        const directoryOptionContainer = document.getElementById('directory_option_container');
-        if (isSandboxed) {
-            directoryOptionContainer.style.display = 'none';
-        }
 
         // Reduce memory and network usage
         function enableMemorySaving(mtl) {
@@ -448,7 +471,7 @@
             mtl.setConf('max_block_generate_distance', 5);
         }
 
-        // Reduce memory and network usage
+        // Higher quality settings
         function higherSettings(mtl) {
             mtl.setConf('viewing_range', 140);
             mtl.setConf('max_block_send_distance', 10);
@@ -712,13 +735,6 @@
             launchBtn.addEventListener('click', async () => {
                 const selectedStorage = document.querySelector('input[name="storage_type"]:checked').value;
                 let storageOpts = { policy: selectedStorage };
-                if (selectedStorage === 'directory') {
-                    if (!directoryHandle) {
-                        showWarning('Please choose a directory for storage first!');
-                        return;
-                    }
-                    storageOpts.handle = directoryHandle;
-                }
 
                 const proxyIndex = document.getElementById('select_proxy').value;
                 const proxy = proxies[proxyIndex][0];
@@ -845,60 +861,74 @@
 
         // Storage Options UI elements
         const storageRadios = document.querySelectorAll('input[name="storage_type"]');
-        const chooseDirButton = document.getElementById('button_choose_directory');
-        let directoryHandle = null; // To store the selected FileSystemDirectoryHandle
-
-        function updatePlayButtonState() {
-            const selectedStorage = document.querySelector('input[name="storage_type"]:checked').value;
-            if (selectedStorage === 'directory') {
-                if (directoryHandle) {
-                    launchBtn.disabled = false;
-                    launchBtn.textContent = 'Play';
-                } else {
-                    launchBtn.disabled = true;
-                    launchBtn.textContent = 'Choose Directory to Play';
-                }
-            } else {
-                launchBtn.disabled = false; // Assuming it gets enabled by onready later
-                launchBtn.textContent = 'Play';
-            }
-        }
-
+        
         storageRadios.forEach(radio => {
             radio.addEventListener('change', function() {
-                directoryHandle = null; // Reset directory handle when changing storage type
-                if (this.value === 'directory') {
-                    chooseDirButton.style.display = 'block';
-                    storageStats.style.display = 'none'; // Hide stats for directory option
-                } else if (this.value === 'indexeddb') {
-                    chooseDirButton.style.display = 'none';
+                if (this.value === 'indexeddb') {
                     storageStats.style.display = 'block'; // Show stats for indexeddb option
                 } else {
-                    chooseDirButton.style.display = 'none';
                     storageStats.style.display = 'none'; // Hide stats for no-storage option
                 }
-                updatePlayButtonState(); // Update Play button based on new selection
             });
         });
 
-        chooseDirButton.addEventListener('click', async () => {
-            try {
-                directoryHandle = await window.showDirectoryPicker();
-                if (directoryHandle) {
-                    console.log('Directory selected:', directoryHandle.name);
-                    tcon_print("Directory: ", directoryHandle.name + " selected for storage.");
-                    showInfo("Directory selected: " + directoryHandle.name);
-                    // Verify permissions (optional, browser usually handles this)
-                    // const permission = await directoryHandle.queryPermission({ mode: 'readwrite' });
-                    // if (permission === 'granted') { ... } 
-                }
-            } catch (err) {
-                console.error('Error choosing directory:', err);
-                tcon_print("Directory: ", "No directory selected or permission denied.");
-                showWarning("No directory selected or permission denied");
-                directoryHandle = null; // Ensure it's null on error
+        // Function to show the manual sync button when the game exits
+        function showManualSyncButton() {
+            const syncButtonContainer = document.getElementById('sync-button-container');
+            if (syncButtonContainer) {
+                syncButtonContainer.style.display = 'block';
             }
-            updatePlayButtonState(); // Update after attempting to choose directory
+        }
+        
+        // Function to hide the manual sync button
+        function hideManualSyncButton() {
+            const syncButtonContainer = document.getElementById('sync-button-container');
+            if (syncButtonContainer) {
+                syncButtonContainer.style.display = 'none';
+            }
+        }
+        
+        // Add event listener for the manual sync button
+        document.addEventListener('DOMContentLoaded', function() {
+            const manualSyncButton = document.getElementById('manual-sync-button');
+            const syncStatus = document.getElementById('sync-status');
+            
+            if (manualSyncButton) {
+                manualSyncButton.addEventListener('click', async function() {
+                    // Disable button during sync
+                    manualSyncButton.disabled = true;
+                    manualSyncButton.textContent = 'Syncing...';
+                    syncStatus.textContent = 'Syncing files...';
+                    
+                    try {
+                        if (window.storageManager) {
+                            await window.storageManager.syncNow();
+                            syncStatus.textContent = 'Sync completed successfully!';
+                            
+                            // Show success message to user
+                            showInfo('Game files have been synchronized successfully');
+                            
+                            // Re-enable button after short delay
+                            setTimeout(() => {
+                                manualSyncButton.disabled = false;
+                                manualSyncButton.textContent = 'Sync Game Files';
+                                syncStatus.textContent = '';
+                            }, 2000);
+                        } else {
+                            syncStatus.textContent = 'Storage manager not available!';
+                            showError('Storage manager not available');
+                            manualSyncButton.disabled = false;
+                            manualSyncButton.textContent = 'Sync Game Files';
+                        }
+                    } catch (error) {
+                        console.error('Error during manual sync:', error);
+                        syncStatus.textContent = 'Sync failed. Please try again.';
+                        showError('Failed to sync game files: ' + error.message);
+                        manualSyncButton.disabled = false;
+                        manualSyncButton.textContent = 'Retry Sync';
+                    }
+                });
+            }
         });
     </script>
 </body>
