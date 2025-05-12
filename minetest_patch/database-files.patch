@@ -1,0 +1,68 @@
+--- minetest/src/database/database-files.cpp	2025-05-12 15:16:01.197416868 +0200
++++ minetest/src/database/database-files.cpp	2025-05-12 13:51:56.064612531 +0200
+@@ -26,6 +26,7 @@
+ #include "server/player_sao.h"
+ #include "util/string.h"
+ #include <cassert>
++#include "notify_fs.h"
+ 
+ // !!! WARNING !!!
+ // This backend is intended to be used on Minetest 0.4.16 only for the transition backend
+@@ -34,6 +35,7 @@
+ PlayerDatabaseFiles::PlayerDatabaseFiles(const std::string &savedir) : m_savedir(savedir)
+ {
+ 	fs::CreateDir(m_savedir);
++	notify_file_modified(m_savedir);
+ }
+ 
+ void PlayerDatabaseFiles::deSerialize(RemotePlayer *p, std::istream &is,
+@@ -151,6 +153,7 @@
+ void PlayerDatabaseFiles::savePlayer(RemotePlayer *player)
+ {
+ 	fs::CreateDir(m_savedir);
++	notify_file_modified(m_savedir);
+ 
+ 	std::string savedir = m_savedir + DIR_DELIM;
+ 	std::string path = savedir + player->getName();
+@@ -192,7 +195,7 @@
+ 	if (!fs::safeWriteToFile(path, ss.str())) {
+ 		infostream << "Failed to write " << path << std::endl;
+ 	}
+-
++	notify_file_modified(path);
+ 	player->onSuccessfulSave();
+ }
+ 
+@@ -213,6 +216,7 @@
+ 
+ 		if (temp_player.getName() == name) {
+ 			fs::DeleteSingleFileOrEmptyDirectory(path);
++			notify_file_deleted(path);
+ 			return true;
+ 		}
+ 
+@@ -373,6 +377,7 @@
+ 		infostream << "Failed to write " << path << std::endl;
+ 		return false;
+ 	}
++	notify_file_modified(path);
+ 	return true;
+ }
+ 
+@@ -480,6 +485,7 @@
+ 				<< m_storage_dir << "' cannot be created." << std::endl;
+ 		return;
+ 	}
++	notify_file_modified(m_storage_dir);
+ 	if (!fs::IsDir(m_storage_dir)) {
+ 		errorstream << "ModStorageDatabaseFiles: Unable to save. '"
+ 				<< m_storage_dir << "' is not a directory." << std::endl;
+@@ -497,7 +503,7 @@
+ 			++it;
+ 			continue;
+ 		}
+-
++		notify_file_modified(m_storage_dir + DIR_DELIM + modname);
+ 		it = m_modified.erase(it);
+ 	}
+ }

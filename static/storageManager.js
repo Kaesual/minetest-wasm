@@ -69,10 +69,6 @@ class StorageManager {
                 return Promise.reject(e);
             }
         }
-
-        if (this.storagePolicy !== 'no-storage') {
-            this.startPeriodicSync();
-        }
         return Promise.resolve();
     }
 
@@ -238,7 +234,7 @@ class StorageManager {
             }
         } catch (e) { 
             console.error('StorageManager-IDB: Error during WasmFS to IDB sync:', e); 
-            throw e; // Let the main syncNow method handle the error
+            throw e;
         }
     }
 
@@ -374,9 +370,6 @@ class StorageManager {
         try {
             console.log('StorageManager: Force clearing all storage data');
             
-            // Stop any active sync
-            this.stopPeriodicSync();
-            
             // Set the storage policy to indexeddb if not already
             if (this.storagePolicy !== 'indexeddb') {
                 console.warn('StorageManager: Storage policy was not set to indexeddb, forcing it for cleanup');
@@ -413,9 +406,6 @@ class StorageManager {
             
             // Clear memory map
             this.lastKnownMtimesIDB.clear();
-            
-            // Restart sync
-            this.startPeriodicSync();
             
             // Update stats
             await this.updateStorageStats();
@@ -493,42 +483,6 @@ class StorageManager {
             console.error('StorageManager: Error clearing storage', e);
             showError('Failed to clear storage: ' + e.message);
             return false;
-        }
-    }
-
-    // --- General Sync Logic ---
-    async syncNow() {
-        try {
-            if (this.storagePolicy === 'indexeddb') {
-                await this.persistToIDB();
-            }
-        } catch (e) {
-            console.error('StorageManager: Error during sync:', e);
-            showWarning('Storage sync failed. Some changes may not be saved.');
-        }
-    }
-
-    startPeriodicSync() {
-        if (this.syncIntervalId) clearInterval(this.syncIntervalId);
-        this.syncIntervalId = setInterval(() => this.syncNow(), this.SYNC_INTERVAL);
-        console.log(`StorageManager: Periodic sync started (${this.storagePolicy}, interval: ${this.SYNC_INTERVAL}ms).`);
-    }
-
-    stopPeriodicSync() {
-        if (this.syncIntervalId) clearInterval(this.syncIntervalId);
-        this.syncIntervalId = null;
-        console.log('StorageManager: Periodic sync stopped.');
-    }
-
-    async onTeardown() { // Call on window.beforeunload or similar
-        this.stopPeriodicSync();
-        console.log('StorageManager: Performing final sync on teardown...');
-        try {
-            await this.syncNow();
-            console.log('StorageManager: Final sync attempt complete.');
-        } catch (e) {
-            console.error('StorageManager: Error during final sync:', e);
-            // No need to show warning here since the page is unloading
         }
     }
 }

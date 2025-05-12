@@ -1,41 +1,14 @@
---- minetest/src/filesys.cpp	2025-05-10 19:50:17.891404715 +0200
-+++ minetest/src/filesys.cpp	2025-05-12 03:04:52.302097354 +0200
+--- minetest/src/filesys.cpp	2025-05-12 15:16:01.198416862 +0200
++++ minetest/src/filesys.cpp	2025-05-12 14:26:59.447164472 +0200
 @@ -28,6 +28,7 @@
  #include "log.h"
  #include "config.h"
  #include "porting.h"
-+#include <emscripten.h>
++#include "notify_fs.h"
  #ifndef SERVER
  #include "irr_ptr.h"
  #endif
-@@ -35,6 +36,26 @@
- namespace fs
- {
- 
-+// Notify JavaScript about file changes for WASM synchronization
-+void notify_file_modified(const std::string &path)
-+{
-+	// Use EM_ASM to directly call JavaScript to report the file change
-+	EM_ASM({
-+		if (Module.onFileChange && typeof Module.onFileChange === 'function')
-+			Module.onFileChange(UTF8ToString($0));
-+	}, path.c_str());
-+}
-+
-+// Notify JavaScript about file/directory deletions
-+void notify_file_deleted(const std::string &path)
-+{
-+	// Use EM_ASM to directly call JavaScript to report the file/directory deletion
-+	EM_ASM({
-+		if (Module.onFileDelete && typeof Module.onFileDelete === 'function')
-+			Module.onFileDelete(UTF8ToString($0));
-+	}, path.c_str());
-+}
-+
- #ifdef _WIN32
- 
- /***********
-@@ -100,8 +121,10 @@
+@@ -100,8 +101,10 @@
  bool CreateDir(const std::string &path)
  {
  	bool r = CreateDirectory(path.c_str(), NULL);
@@ -47,7 +20,7 @@
  	if(GetLastError() == ERROR_ALREADY_EXISTS)
  		return true;
  	return false;
-@@ -145,6 +168,7 @@
+@@ -145,6 +148,7 @@
  					<< path << std::endl;
  			return false;
  		}
@@ -55,7 +28,7 @@
  		return true;
  	}
  	infostream << "RecursiveDelete: Deleting content of directory "
-@@ -164,6 +188,7 @@
+@@ -164,6 +168,7 @@
  				<< path << std::endl;
  		return false;
  	}
@@ -63,7 +36,7 @@
  	return true;
  }
  
-@@ -282,15 +307,15 @@
+@@ -282,15 +287,15 @@
  bool CreateDir(const std::string &path)
  {
  	int r = mkdir(path.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
@@ -82,7 +55,7 @@
  }
  
  bool PathExists(const std::string &path)
-@@ -333,6 +358,7 @@
+@@ -333,6 +338,7 @@
  					<< path << std::endl;
  			return false;
  		}
@@ -90,7 +63,7 @@
  		return true;
  	}
  	infostream << "RecursiveDelete: Deleting content of directory "
-@@ -352,6 +378,7 @@
+@@ -352,6 +358,7 @@
  				<< path << std::endl;
  		return false;
  	}
@@ -98,7 +71,7 @@
  	return true;
  }
  
-@@ -851,6 +878,7 @@
+@@ -851,6 +858,7 @@
  		return false;
  	}
  
@@ -106,7 +79,7 @@
  	return true;
  }
  
-@@ -932,7 +960,12 @@
+@@ -932,7 +940,12 @@
  
  bool Rename(const std::string &from, const std::string &to)
  {

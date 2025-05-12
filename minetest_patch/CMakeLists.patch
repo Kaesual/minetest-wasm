@@ -1,0 +1,10 @@
+--- minetest/src/CMakeLists.txt	2025-05-12 15:16:01.190416908 +0200
++++ minetest/src/CMakeLists.txt	2025-05-12 13:52:44.353878637 +0200
+@@ -401,6 +401,7 @@
+ 	nodemetadata.cpp
+ 	nodetimer.cpp
+ 	noise.cpp
++	notify_fs.cpp
+ 	objdef.cpp
+ 	object_properties.cpp
+ 	particles.cpp

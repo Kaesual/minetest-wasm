@@ -89,6 +89,7 @@ class IDBManager {
                 const request = objectStore.add(fileRecord);
                 
                 request.onsuccess = () => {
+                    console.log("File saved:", path, "size:", safeContent.length);
                     resolve();
                 };
                 

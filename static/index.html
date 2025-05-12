@@ -306,21 +306,6 @@
             z-index: 1000;
         }
         
-        #manual-sync-button {
-            padding: 10px 15px;
-            font-size: 16px;
-            background-color: #4285f4;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        }
-        
-        #manual-sync-button:hover {
-            background-color: #3367d6;
-        }
-        
         #sync-status {
             margin-top: 8px;
             font-size: 14px;
@@ -439,10 +424,6 @@
                 </div>
             </div>
         </div>
-    </div>
-    <div id="sync-button-container">
-        <button id="manual-sync-button">Sync Game Files</button>
-        <div id="sync-status"></div>
     </div>
     <script type="text/javascript" src="%__RELEASE_UUID__%/launcher.js"></script>
     <script type="text/javascript">
@@ -866,65 +847,6 @@
                     storageStats.style.display = 'none'; // Hide stats for no-storage option
                 }
             });
-        });
-
-        // Function to show the manual sync button when the game exits
-        function showManualSyncButton() {
-            const syncButtonContainer = document.getElementById('sync-button-container');
-            if (syncButtonContainer) {
-                syncButtonContainer.style.display = 'block';
-            }
-        }
-        
-        // Function to hide the manual sync button
-        function hideManualSyncButton() {
-            const syncButtonContainer = document.getElementById('sync-button-container');
-            if (syncButtonContainer) {
-                syncButtonContainer.style.display = 'none';
-            }
-        }
-        
-        // Add event listener for the manual sync button
-        document.addEventListener('DOMContentLoaded', function() {
-            const manualSyncButton = document.getElementById('manual-sync-button');
-            const syncStatus = document.getElementById('sync-status');
-            
-            if (manualSyncButton) {
-                manualSyncButton.addEventListener('click', async function() {
-                    // Disable button during sync
-                    manualSyncButton.disabled = true;
-                    manualSyncButton.textContent = 'Syncing...';
-                    syncStatus.textContent = 'Syncing files...';
-                    
-                    try {
-                        if (window.storageManager) {
-                            await window.storageManager.syncNow();
-                            syncStatus.textContent = 'Sync completed successfully!';
-                            
-                            // Show success message to user
-                            showInfo('Game files have been synchronized successfully');
-                            
-                            // Re-enable button after short delay
-                            setTimeout(() => {
-                                manualSyncButton.disabled = false;
-                                manualSyncButton.textContent = 'Sync Game Files';
-                                syncStatus.textContent = '';
-                            }, 2000);
-                        } else {
-                            syncStatus.textContent = 'Storage manager not available!';
-                            showError('Storage manager not available');
-                            manualSyncButton.disabled = false;
-                            manualSyncButton.textContent = 'Sync Game Files';
-                        }
-                    } catch (error) {
-                        console.error('Error during manual sync:', error);
-                        syncStatus.textContent = 'Sync failed. Please try again.';
-                        showError('Failed to sync game files: ' + error.message);
-                        manualSyncButton.disabled = false;
-                        manualSyncButton.textContent = 'Retry Sync';
-                    }
-                });
-            }
         });
     </script>
 </body>

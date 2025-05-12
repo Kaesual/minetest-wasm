@@ -1,0 +1,26 @@
+--- minetest/src/database/database-sqlite3.cpp	2025-05-12 15:16:01.197416868 +0200
++++ minetest/src/database/database-sqlite3.cpp	2025-05-12 15:12:56.803510408 +0200
+@@ -38,6 +38,7 @@
+ #include "server/player_sao.h"
+ 
+ #include <cassert>
++#include "notify_fs.h"
+ 
+ // When to print messages when the database is being held locked by another process
+ // Note: I've seen occasional delays of over 250ms while running minetestmapper.
+@@ -118,6 +119,7 @@
+ 	m_savedir(savedir),
+ 	m_dbname(dbname)
+ {
++	notify_file_modified(m_savedir + DIR_DELIM + m_dbname + ".sqlite");
+ }
+ 
+ void Database_SQLite3::beginSave()
+@@ -134,6 +136,7 @@
+ 	SQLRES(sqlite3_step(m_stmt_end), SQLITE_DONE,
+ 		"Failed to commit SQLite3 transaction");
+ 	sqlite3_reset(m_stmt_end);
++	// notify_file_modified(m_savedir + DIR_DELIM + m_dbname + ".sqlite");
+ }
+ 
+ void Database_SQLite3::openDatabase()

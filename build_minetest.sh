@@ -28,9 +28,18 @@ DUMMY_INCLUDE_DIR="$(pwd)/dummy_dir"
 
 if ! $INCREMENTAL; then
     # Apply minetest_filesys patch before building
-    pushd "$SOURCES_DIR"
-    patch -p0 < "$BASE_DIR/minetest_filesys.patch"
-    popd
+
+    if [ ! -f "$SOURCES_DIR/minetest/src/notify_fs.cpp" ]; then
+      echo "Applying minetest patches for notifying the file system about changes"
+      cp "$BASE_DIR/minetest_patch/notify_fs.cpp" "$SOURCES_DIR/minetest/src/notify_fs.cpp"
+      cp "$BASE_DIR/minetest_patch/notify_fs.h" "$SOURCES_DIR/minetest/src/notify_fs.h"
+      pushd "$SOURCES_DIR"
+      patch -p0 < "$BASE_DIR/minetest_patch/filesys.patch"
+      # patch -p0 < "$BASE_DIR/minetest_patch/database-files.patch"
+      # patch -p0 < "$BASE_DIR/minetest_patch/database-sqlite3.patch"
+      patch -p0 < "$BASE_DIR/minetest_patch/CMakeLists.patch"
+      popd
+    fi
     
     emcmake cmake \
       -DCMAKE_VERBOSE_MAKEFILE=ON \

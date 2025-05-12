@@ -142,6 +142,34 @@ function activateBody() {
     updateProgressBar(0, 0);
 }
 
+// Normalize the path to handle cases like "/minetest/bin/../worlds/asd/foo.txt"
+// We need to resolve relative path segments like ".." and "."
+function normalizePath(path) {
+    // Split the path into segments
+    const segments = path.split('/');
+    const resultSegments = [];
+    
+    for (let i = 0; i < segments.length; i++) {
+        const segment = segments[i];
+        
+        // Handle parent directory segments
+        if (segment === '..') {
+            if (resultSegments.length > 0) {
+                resultSegments.pop();
+            }
+            continue;
+        }
+        
+        // Add valid segments to the result
+        resultSegments.push(segment);
+    }
+    
+    // Reconstruct the path
+    let normalizedPath = resultSegments.join('/');
+    
+    return normalizedPath;
+}
+
 var PB_bytes_downloaded = 0;
 var PB_bytes_needed = 0;
 function updateProgressBar(doneBytes, neededBytes) {
@@ -244,6 +272,7 @@ async function initialLoadFromIDB() {
                     Module.FS.mkdirTree(dir);
                     // console.log('WasmFS_IDB: Created directory in WasmFS: ' + dir);
                 }
+                console.log("Writing file to WasmFS:", file.path, "size:", file.content.length);
                 Module.FS.writeFile(file.path, file.content); // content is Uint8Array
                 lastKnownMtimes.set(file.path, file.mtime.getTime()); // Store original mtime
                 // console.log('WasmFS_IDB: Loaded file from IDB to WasmFS: ' + file.path);
@@ -306,73 +335,6 @@ async function initializePersistentFS(callback) {
         console.error('WasmFS_IDB: Error during IndexedDB persistence setup: ', e);
         persistenceInitialized = false; 
         if (callback) callback(e);
-    }
-}
-
-async function persistFS() {
-    if (!persistenceInitialized || !Module.FS || !idbManager) {
-        // console.warn('WasmFS_IDB: Cannot persist, not initialized or FS/IDBManager not available.');
-        return;
-    }
-
-    // console.log('WasmFS_IDB: Starting periodic sync from WasmFS to IndexedDB for path: ' + WORLDS_SYNC_BASE_PATH);
-    let filesProcessed = 0;
-    let filesSynced = 0;
-
-    async function scanDirectory(currentPath) {
-        let entries;
-        try {
-            entries = Module.FS.readdir(currentPath);
-        } catch (e) {
-            // If readdir fails, it might be a file, or an inaccessible directory/error.
-            // We rely on the fact that `currentPath` itself was listed by a parent readdir call,
-            // or is the initial WORLDS_SYNC_BASE_PATH.
-            // If it is the base path and readdir fails, something is very wrong.
-            if (currentPath === WORLDS_SYNC_BASE_PATH && e.message.includes('No such file or directory')) {
-                 console.warn('WasmFS_IDB: WORLDS_SYNC_BASE_PATH does not exist in WasmFS, skipping scan: ' + currentPath, e);
-                 return; // Nothing to scan if base path is gone
-            }
-            // Assume it's a file if readdir fails for a path we know should exist (from parent scan)
-            // and the error isn't about the base path itself missing.
-            // We will try to stat it as a file.
-            try {
-                const stat = Module.FS.stat(currentPath);
-                // If stat succeeds, and readdir failed, it strongly implies it's a file.
-                filesProcessed++;
-                const currentMtimeMs = stat.mtime * 1000; // Convert seconds to milliseconds
-                const knownMtimeMs = lastKnownMtimes.get(currentPath); // Already in ms
-
-                if (currentMtimeMs !== knownMtimeMs) {
-                    // console.log(`WasmFS_IDB: File changed (or new): ${currentPath}, mtime: ${new Date(currentMtimeMs)} (known: ${knownMtimeMs ? new Date(knownMtimeMs) : 'N/A'})`);
-                    const content = Module.FS.readFile(currentPath, { encoding: 'binary' });
-                    // Pass mtime & atime in milliseconds to IDBManager
-                    await idbManager.saveFile(currentPath, content, stat.mtime * 1000, stat.atime * 1000);
-                    lastKnownMtimes.set(currentPath, currentMtimeMs);
-                    filesSynced++;
-                }
-                return; // It was a file, processed.
-            } catch (statError) {
-                // If both readdir and stat fail for an entry known from parent, log and skip.
-                console.error('WasmFS_IDB: Error stating WasmFS entry (and readdir failed, so not a typical dir): ', currentPath, 'readdir error:', e, 'stat error:', statError);
-                return;
-            }
-        }
-
-        // If readdir succeeded, it's a directory.
-        for (const entry of entries) {
-            if (entry === '.' || entry === '..') continue;
-            const fullPath = currentPath + (currentPath.endsWith('/') ? '' : '/') + entry;
-            await scanDirectory(fullPath); // Recurse for sub-items (which could be files or dirs)
-        }
-    }
-
-    try {
-        await scanDirectory(WORLDS_SYNC_BASE_PATH);
-        if (filesSynced > 0) {
-            console.log(`WasmFS_IDB: Sync complete. Processed ${filesProcessed} WasmFS files, synced ${filesSynced} to IndexedDB.`);
-        }
-    } catch (e) {
-        console.error('WasmFS_IDB: Error during WasmFS to IndexedDB sync process:', e);
     }
 }
 
@@ -595,99 +557,41 @@ var Module = {
         mtLauncher.onprogress('wasm_module', (this.totalDependencies-left) / this.totalDependencies);
     },
     // Handler for file changes reported by C++ code
-    onFileChange: function(path, isDirectory) {
-        console.log("File changed:", path, "isDirectory:", isDirectory);
-
-        // Normalize the path to handle cases like "/minetest/bin/../worlds/asd/foo.txt"
-        // We need to resolve relative path segments like ".." and "."
-        function normalizePath(path) {
-            // Split the path into segments
-            const segments = path.split('/');
-            const resultSegments = [];
-            
-            for (let i = 0; i < segments.length; i++) {
-                const segment = segments[i];
-                
-                // Handle parent directory segments
-                if (segment === '..') {
-                    if (resultSegments.length > 0) {
-                        resultSegments.pop();
-                    }
-                    continue;
-                }
-                
-                // Add valid segments to the result
-                resultSegments.push(segment);
-            }
-            
-            // Reconstruct the path
-            let normalizedPath = resultSegments.join('/');
-            
-            return normalizedPath;
-        }
-        
+    onFileChange: function(path) {
         // Normalize the path before processing
-        const normalizedPath = normalizePath(path);
-        if (normalizedPath.startsWith('/minetest/worlds/') || normalizedPath.startsWith('/minetest/mods/')) {
-            // Only save worlds and mods to IndexedDB
-            // Check if storage manager is available
-            if (typeof storageManager !== 'undefined' && storageManager) {
-                // For directories, we just need to ensure they exist in IndexedDB
-                if (isDirectory) {
-                    storageManager.ensureDirectoryExists(normalizedPath);
-                } else {
-                    // For files, read from WASMFS and persist to IndexedDB
-                    try {
-                        const content = FS.readFile(normalizedPath, { encoding: 'binary' });
-                        storageManager.persistFile(normalizedPath, content);
-                    } catch (e) {
-                        console.error("Error persisting file:", normalizedPath, e);
-                    }
+        path = normalizePath(path);
+        const statResult = FS.stat(path);
+        const isDirectory = (statResult.mode & 16384) === 16384;
+
+        if ((path.startsWith('/minetest/worlds/') || path.startsWith('/minetest/mods/')) && (typeof storageManager !== 'undefined' && storageManager)) {
+            console.log("File changed:", path);
+            // For directories, we just need to ensure they exist in IndexedDB
+            if (isDirectory) {
+                storageManager.ensureDirectoryExists(path);
+            } else {
+                // For files, read from WASMFS and persist to IndexedDB
+                try {
+                    const content = FS.readFile(path, { encoding: 'binary' });
+                    storageManager.persistFile(path, content);
+                } catch (e) {
+                    console.error("Error persisting file:", path, e);
                 }
             }
         }
     },
-    
+
     // Handler for file deletions reported by C++ code
-    onFileDelete: function(path, isDirectory) {
-        console.log("File deleted:", path, "isDirectory:", isDirectory);
+    onFileDelete: function(path) {
+        path = normalizePath(path);
+        console.log("File deleted:", path);
         
         // Check if storage manager is available
-        if (typeof storageManager !== 'undefined' && storageManager) {
-            if (isDirectory) {
-                // For directories, we need to delete the directory and all its contents
-                storageManager.deleteDirectory(path);
-            } else {
-                // For single files, delete just that file
-                storageManager.deleteFile(path);
-            }
-        }
+        // if (typeof storageManager !== 'undefined' && storageManager) {
+        //     // For directories, always use deleteDirectory which handles both files and directories
+        //     storageManager.deleteDirectory(path);
+        // }
     },
-    
-    // Handler for map block saves
-    onMapBlockSaved: function(x, y, z) {
-        console.log("Map block saved at:", x, y, z);
-        
-        // This is useful for tracking which parts of the world are being modified
-        // We could use this to prioritize certain areas for syncing
-        if (typeof storageManager !== 'undefined' && storageManager) {
-            // The actual file path for the block is already handled by onFileChange
-            // But we can use this to track block-level statistics if needed
-            storageManager.recordBlockSave(x, y, z);
-        }
-    },
-    
-    // Handler for mod storage changes
-    onModStorageChanged: function(modname, key) {
-        console.log("Mod storage changed for mod:", modname, "key:", key);
-        
-        // We could use this to prioritize mod-related files for syncing
-        if (typeof storageManager !== 'undefined' && storageManager) {
-            // The actual file save will trigger onFileChange
-            storageManager.recordModChange(modname, key);
-        }
-    },
-};
+}
 
 Module['printErr'] = Module['print'];
 
@@ -704,12 +608,10 @@ const workerInject = `
 `;
 Module['mainScriptUrlOrBlob'] = new Blob([workerInject], { type: "text/javascript" });
 
-
-
 Module['onFullScreen'] = () => { fixGeometry(); };
 window.onerror = function(event) {
     consolePrint('Exception thrown, see JavaScript console');
-};
+}
 
 function resizeCanvas(width, height) {
     const canvas = mtCanvas;
@@ -1315,27 +1217,4 @@ StorageManager.prototype.deleteDirectory = function(dirPath) {
         // Get files in and under this directory and delete them
         this.idbManager.deleteDirectory(dirPath);
     }
-};
-
-/**
- * Records block saves for statistics
- * @param {number} x - Block X coordinate
- * @param {number} y - Block Y coordinate
- * @param {number} z - Block Z coordinate
- */
-StorageManager.prototype.recordBlockSave = function(x, y, z) {
-    // This method is optional - it can be used for statistics or prioritization
-    // Currently just logs the save
-    console.debug("Block saved at", x, y, z);
-};
-
-/**
- * Records mod storage changes for statistics
- * @param {string} modname - Name of the mod
- * @param {string} key - Key that was changed
- */
-StorageManager.prototype.recordModChange = function(modname, key) {
-    // This method is optional - it can be used for statistics or prioritization
-    // Currently just logs the change
-    console.debug("Mod storage changed:", modname, key);
 };
