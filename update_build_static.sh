@@ -1,18 +1,28 @@
 #!/bin/bash
 
-RELEASE_UUID=$(find ./www -mindepth 1 -maxdepth 1 -type d -printf '%f')
-echo "RELEASE_UUID: $RELEASE_UUID"
+cd "$(dirname "$0")"
 
-# Copy JS libraries
-rm -f ./www/$RELEASE_UUID/idb.js
-rm -f ./www/$RELEASE_UUID/snackbar.js
-rm -f ./www/$RELEASE_UUID/storageManager.js
+# Build React app
+echo "Building React app..."
+pushd app
+# Check if build is required
+if [ "${1:-}" = "--with-build" ]; then
+  # Check if node_modules exists, if not run npm install
+  ./docker.sh --with-build npm --version
+  if [ ! -d "node_modules" ]; then
+    ./docker.sh --with-build npm install
+  fi
+  # Build the React app
+  ./docker.sh --with-build npm run build
+else
+  ./docker.sh npm --version
+  # Check if node_modules exists, if not run npm install
+  if [ ! -d "node_modules" ]; then
+    ./docker.sh npm install
+  fi
+  # Build the React app
+  ./docker.sh npm run build
+fi
+popd
 
-cp ./static/idb.js ./www/$RELEASE_UUID/idb.js
-cp ./static/snackbar.js ./www/$RELEASE_UUID/snackbar.js
-cp ./static/storageManager.js ./www/$RELEASE_UUID/storageManager.js
-
-# Update HTML and launcher with proper UUID
-sed "s/%__RELEASE_UUID__%/$RELEASE_UUID/g" ./static/launcher.js > ./www/$RELEASE_UUID/launcher.js
-sed "s/%__RELEASE_UUID__%/$RELEASE_UUID/g" ./static/index.html > ./www/index.html
-echo "SUCCESS"
+./build_www.sh

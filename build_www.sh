@@ -2,21 +2,11 @@
 
 source common.sh
 
-# Generate a random hash for this release
-# This is used as a prefix for cache invalidation
-SEEDFILE="/tmp/minetest_build_uuid_seed"
-dd status=none if=/dev/urandom bs=64 count=1 > "$SEEDFILE"
-md5sum -b "$SEEDFILE" > "$SEEDFILE".hash
-RELEASE_UUID=`cut -b -12 "$SEEDFILE".hash`
-# Clean up temp files
-rm "$SEEDFILE" "$SEEDFILE".hash
-
-
-RELEASE_DIR="$WWW_DIR/$RELEASE_UUID"
+RELEASE_DIR="$WWW_DIR/minetest"
 PACKS_DIR="$RELEASE_DIR/packs"
-ASSETS_DST_DIR="$RELEASE_DIR/assets"
+ASSETS_DST_DIR="$WWW_DIR/assets"
 
-echo "Installing release $RELEASE_UUID into www/"
+echo "Installing release into www/"
 rm -rf "$WWW_DIR"
 mkdir "$WWW_DIR"
 mkdir "$RELEASE_DIR"
@@ -32,9 +22,6 @@ done
 
 # Copy assets
 cp -a "$BASE_DIR/static/assets/." "$ASSETS_DST_DIR"
-cp -a "$BASE_DIR/static/idb.js" "$RELEASE_DIR"
-cp -a "$BASE_DIR/static/snackbar.js" "$RELEASE_DIR"
-cp -a "$BASE_DIR/static/storageManager.js" "$RELEASE_DIR"
 
 # Ideally this would be in RELEASE_DIR, but the way this file
 # is located (see emcc --source-map-base) apparently cannot be
@@ -45,20 +32,9 @@ fi
 
 popd
 
-apply_substitutions() {
-    local srcfile="$1"
-    local dstfile="$2"
-    sed "s/%__RELEASE_UUID__%/$RELEASE_UUID/g" "$srcfile" > "$dstfile"
-}
-
-# Copy static files, replacing $RELEASE_UUID with the id
-pushd "$BASE_DIR/static"
-apply_substitutions htaccess_toplevel   "$WWW_DIR"/.htaccess
-apply_substitutions index.html  "$WWW_DIR"/index.html
-apply_substitutions htaccess_release "$RELEASE_DIR"/.htaccess
-apply_substitutions launcher.js "$RELEASE_DIR"/launcher.js
-apply_substitutions htaccess_packs "$PACKS_DIR"/.htaccess
-popd
+# Copy React app build to www/
+echo "Copying React app build to www/"
+cp -a "$BASE_DIR/app/build/." "$WWW_DIR"
 
 # Copy base file system pack
 cp "$BUILD_DIR/fsroot.tar.zst" "$PACKS_DIR/base.pack"

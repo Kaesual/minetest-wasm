@@ -1,0 +1,687 @@
+import React, { useEffect, useRef, useState, useLayoutEffect } from 'react';
+import { useStorageManager } from '../utils/storageManagerContext';
+import SnackBar from './SnackBar';
+
+// Define global types to match the original launcher.js
+interface Window {
+  emloop_ready: () => void;
+  emloop_request_animation_frame: () => void;
+  Module: any;
+}
+
+interface RuntimeScreenProps {
+  gameOptions: {
+    language: string;
+    proxy: string;
+    storagePolicy: string;
+  };
+  onGameStatus: (status: 'running' | 'failed') => void;
+}
+
+declare global {
+  interface Window {
+    emloop_ready?: () => void;
+    emloop_request_animation_frame?: () => void;
+    Module: any;
+    emloop_pause: any;
+    emloop_unpause: any;
+    emloop_init_sound: any;
+    emloop_invoke_main: any;
+    emloop_install_pack: any;
+    emloop_set_minetest_conf: any;
+    irrlicht_want_pointerlock: any;
+    irrlicht_force_pointerlock: any;
+    irrlicht_resize: any;
+    emsocket_init: any;
+    emsocket_set_proxy: any;
+    emsocket_set_vpn: any;
+    cwrap: (name: string, returnType: string | null, argTypes: string[]) => any;
+    stringToNewUTF8: (text: string) => number;
+    _malloc: (size: number) => number;
+    _free: (ptr: number) => void;
+    HEAPU8: Uint8Array;
+    updateProgressBar?: (doneBytes: number, neededBytes: number) => void;
+  }
+}
+
+// Class to handle resource packs similar to the original launcher
+class PackManager {
+  private addedPacks = new Set<string>();
+  private installedPacks = new Set<string>();
+  private packPromises = new Map<string, Promise<void>>();
+  private progressCallback?: (name: string, progress: number) => void;
+  
+  constructor(progressCallback?: (name: string, progress: number) => void) {
+    this.progressCallback = progressCallback;
+  }
+  
+  async addPack(name: string): Promise<void> {
+    if (name === 'minetest_game' || name === 'devtest' || this.addedPacks.has(name)) {
+      return;
+    }
+    
+    this.addedPacks.add(name);
+    
+    if (this.packPromises.has(name)) {
+      return this.packPromises.get(name);
+    }
+    
+    const promise = this.fetchAndInstallPack(name);
+    this.packPromises.set(name, promise);
+    return promise;
+  }
+  
+  async fetchAndInstallPack(name: string): Promise<void> {
+    if (!window._malloc || !window.stringToNewUTF8 || !window.emloop_install_pack || !window._free) {
+      console.error(`Required WASM functions not available to install pack: ${name}`);
+      return Promise.reject(`Required WASM functions not available`);
+    }
+    
+    const packUrl = `minetest/packs/${name}.pack`;
+    
+    try {
+      console.log(`Fetching pack: ${packUrl}`);
+      const response = await fetch(packUrl);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch pack ${name}: ${response.status} ${response.statusText}`);
+      }
+      
+      const contentLength = response.headers.get('Content-Length');
+      let totalSize = contentLength ? parseInt(contentLength, 10) : 0;
+      
+      // Update progress bar
+      if (window.updateProgressBar) {
+        window.updateProgressBar(0, totalSize);
+      }
+      
+      // Read the response body
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error(`Cannot read response body for pack ${name}`);
+      }
+      
+      const chunks: Uint8Array[] = [];
+      let receivedLength = 0;
+      
+      while (true) {
+        const {done, value} = await reader.read();
+        
+        if (done) {
+          break;
+        }
+        
+        chunks.push(value);
+        receivedLength += value.length;
+        
+        // Report progress
+        if (window.updateProgressBar) {
+          window.updateProgressBar(value.length, 0);
+        }
+        
+        if (this.progressCallback) {
+          this.progressCallback(`download:${name}`, receivedLength / (totalSize || 1));
+        }
+      }
+      
+      // Combine all chunks into a single Uint8Array
+      const allData = new Uint8Array(receivedLength);
+      let position = 0;
+      
+      for (const chunk of chunks) {
+        allData.set(chunk, position);
+        position += chunk.length;
+      }
+      
+      // Allocate memory and copy the data
+      const dataPtr = window._malloc(receivedLength);
+      window.HEAPU8.set(allData, dataPtr);
+      
+      // Install the pack
+      const namePtr = window.stringToNewUTF8(name);
+      window.emloop_install_pack(namePtr, dataPtr, receivedLength);
+      
+      // Free the memory
+      window._free(namePtr);
+      window._free(dataPtr);
+      
+      this.installedPacks.add(name);
+      
+      if (this.progressCallback) {
+        this.progressCallback(`install:${name}`, 1.0);
+      }
+      
+      console.log(`Successfully installed pack: ${name}`);
+    } catch (error) {
+      console.error(`Error installing pack ${name}:`, error);
+      return Promise.reject(error);
+    }
+  }
+  
+  isPackInstalled(name: string): boolean {
+    return this.installedPacks.has(name);
+  }
+  
+  async addMultiplePacks(packs: string[]): Promise<void> {
+    const promises = packs.map(pack => this.addPack(pack));
+    return Promise.all(promises).then(() => {});
+  }
+}
+
+// Create a global updateProgressBar function
+window.updateProgressBar = (doneBytes: number, neededBytes: number) => {
+  // This would be implemented similarly to the original launcher.js if needed
+  console.log(`Progress: downloaded ${doneBytes} bytes of ${neededBytes}`);
+};
+
+const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const [showConsole, setShowConsole] = useState(false);
+  const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
+  const [resolution, setResolution] = useState('high');
+  const [aspectRatio, setAspectRatio] = useState('any');
+  const consoleOutputRef = useRef<HTMLTextAreaElement>(null);
+  const storageManager = useStorageManager();
+  const [isLoading, setIsLoading] = useState(true);
+  const [packManager] = useState(() => new PackManager((name, progress) => {
+    consolePrint(`Task ${name} : ${Math.round(progress * 100)}%`);
+  }));
+  
+  // Function to handle console output
+  const consolePrint = (text: string) => {
+    setConsoleOutput(prev => [...prev, text]);
+    console.log(text); // Also log to browser console
+    
+    // Scroll to bottom on next tick
+    setTimeout(() => {
+      if (consoleOutputRef.current) {
+        consoleOutputRef.current.scrollTop = consoleOutputRef.current.scrollHeight;
+      }
+    }, 0);
+  };
+  
+  // Function to fix canvas geometry based on selected options
+  const fixGeometry = () => {
+    if (!canvasRef.current || !canvasContainerRef.current) return;
+    
+    const canvas = canvasRef.current;
+    const container = canvasContainerRef.current;
+    
+    // Get container dimensions
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+    
+    let targetWidth = containerWidth;
+    let targetHeight = containerHeight;
+    
+    // Apply resolution setting
+    let resolutionFactor = 1.0;
+    switch(resolution) {
+      case 'low':
+        resolutionFactor = 0.5;
+        break;
+      case 'medium':
+        resolutionFactor = 0.75;
+        break;
+      case 'high':
+      default:
+        resolutionFactor = 1.0;
+        break;
+    }
+    
+    targetWidth *= resolutionFactor;
+    targetHeight *= resolutionFactor;
+    
+    // Apply aspect ratio constraint if needed
+    if (aspectRatio !== 'any') {
+      const ratioValues = aspectRatio.split(':').map(Number);
+      if (ratioValues.length === 2 && !ratioValues.includes(NaN)) {
+        const targetRatio = ratioValues[0] / ratioValues[1];
+        const currentRatio = targetWidth / targetHeight;
+        
+        if (currentRatio > targetRatio) {
+          // Too wide, adjust width
+          targetWidth = targetHeight * targetRatio;
+        } else if (currentRatio < targetRatio) {
+          // Too tall, adjust height
+          targetHeight = targetWidth / targetRatio;
+        }
+      }
+    }
+    
+    // Set canvas dimensions
+    canvas.width = Math.floor(targetWidth);
+    canvas.height = Math.floor(targetHeight);
+    
+    // Set CSS dimensions to handle any scaling
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+    
+    // Notify the Module if it exists
+    if (window.Module && window.irrlicht_resize) {
+      window.irrlicht_resize(canvas.width, canvas.height);
+    }
+  };
+  
+  // Handle aspect ratio change
+  const handleAspectRatioChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setAspectRatio(e.target.value);
+  };
+  
+  // Handle resolution change
+  const handleResolutionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setResolution(e.target.value);
+  };
+  
+  // Toggle console visibility
+  const toggleConsole = () => {
+    setShowConsole(prev => !prev);
+  };
+
+  // Set minetest.conf options
+  const setMinetestConf = (key: string, value: string) => {
+    if (window.emloop_set_minetest_conf && window.stringToNewUTF8) {
+      const confLine = `${key} = ${value}\n`;
+      const confBuf = window.stringToNewUTF8(confLine);
+      window.emloop_set_minetest_conf(confBuf);
+      window._free(confBuf);
+      consolePrint(`Set config: ${key} = ${value}`);
+    }
+  };
+
+  // Apply proxy setting
+  const setProxy = (proxyUrl: string) => {
+    if (window.emsocket_set_proxy && window.stringToNewUTF8) {
+      const proxyBuf = window.stringToNewUTF8(proxyUrl);
+      window.emsocket_set_proxy(proxyBuf);
+      window._free(proxyBuf);
+      consolePrint(`Set proxy: ${proxyUrl}`);
+    }
+  };
+
+  // Function to create argv for main
+  const makeArgv = (args: string[]) => {
+    if (!window._malloc || !window.HEAPU8 || !window.stringToNewUTF8) {
+      consolePrint("Error: Required Emscripten functions not available");
+      return [0, 0];
+    }
+    
+    // Allocate memory for pointers (4 bytes per pointer)
+    const argv = window._malloc((args.length + 1) * 4);
+    let i;
+    
+    // Set up the argument pointers
+    for (i = 0; i < args.length; i++) {
+      // Convert JS string to UTF8, get pointer, and store in argv array
+      const ptr = window.stringToNewUTF8(args[i]);
+      // HEAPU32[(argv >> 2) + i] = ptr;
+      // Since we don't have direct access to HEAPU32, we use Uint32Array view
+      const view = new Uint32Array(window.HEAPU8.buffer, argv + i * 4, 1);
+      view[0] = ptr;
+    }
+    
+    // Set the last element to null (C standard)
+    const view = new Uint32Array(window.HEAPU8.buffer, argv + i * 4, 1);
+    view[0] = 0;
+    
+    return [i, argv];
+  };
+
+  // Launch the game with the current settings
+  const launchGame = async () => {
+    try {
+      consolePrint("Installing required game packs...");
+      
+      // Always install the base pack first
+      await packManager.addPack('base');
+      
+      // Add minetest_game pack which provides the main menu
+      await packManager.addPack('minetest_game');
+      
+      // Set graphics/performance settings
+      setMinetestConf('viewing_range', '140');
+      setMinetestConf('max_block_send_distance', '10');
+      setMinetestConf('max_block_generate_distance', '10');
+      setMinetestConf('block_send_optimize_distance', '10');
+      setMinetestConf('client_mapblock_limit', '8000');
+      
+      // Set language
+      setMinetestConf('language', gameOptions.language);
+      
+      // Set proxy
+      if (window.emsocket_set_proxy) {
+        setProxy(gameOptions.proxy);
+      }
+      
+      // Set up arguments - don't use --go flag to start in menu mode
+      const args = ['./minetest'];
+      const [argc, argv] = makeArgv(args);
+      
+      // Launch the game
+      if (window.emloop_invoke_main) {
+        consolePrint("Starting Minetest...");
+        window.emloop_invoke_main(argc, argv);
+        
+        // Need to pause/unpause to let the browser redraw the DOM
+        if (window.emloop_pause && window.emloop_unpause) {
+          window.emloop_pause();
+          window.requestAnimationFrame(() => { 
+            window.emloop_unpause();
+            // Signal that the game is running
+            onGameStatus('running');
+          });
+        }
+      }
+    } catch (error) {
+      consolePrint(`Error launching game: ${error}`);
+      setIsLoading(false);
+      onGameStatus('failed');
+    }
+  };
+
+  // Setup the global functions needed by the WASM module
+  useLayoutEffect(() => {
+    // Define the emloop_ready function that will be called by the WASM module
+    window.emloop_ready = () => {
+      consolePrint("emloop_ready called. Setting up functions...");
+      
+      try {
+        // Setup cwrapped functions - copied from original launcher.js
+        window.emloop_pause = window.cwrap("emloop_pause", null, []);
+        window.emloop_unpause = window.cwrap("emloop_unpause", null, []);
+        window.emloop_init_sound = window.cwrap("emloop_init_sound", null, []);
+        window.emloop_invoke_main = window.cwrap("emloop_invoke_main", null, ["number", "number"]);
+        window.emloop_install_pack = window.cwrap("emloop_install_pack", null, ["number", "number", "number"]);
+        window.emloop_set_minetest_conf = window.cwrap("emloop_set_minetest_conf", null, ["number"]);
+        window.irrlicht_want_pointerlock = window.cwrap("irrlicht_want_pointerlock", "number", []);
+        window.irrlicht_force_pointerlock = window.cwrap("irrlicht_force_pointerlock", null, []);
+        window.irrlicht_resize = window.cwrap("irrlicht_resize", null, ["number", "number"]);
+        window.emsocket_init = window.cwrap("emsocket_init", null, []);
+        window.emsocket_set_proxy = window.cwrap("emsocket_set_proxy", null, ["number"]);
+        window.emsocket_set_vpn = window.cwrap("emsocket_set_vpn", null, ["number"]);
+
+        consolePrint("Successfully wrapped Emscripten functions");
+
+        // Initialize the storage manager with the selected storage policy
+        storageManager.initialize(
+          { policy: gameOptions.storagePolicy }, 
+          window.Module.FS
+        ).then(() => {
+          consolePrint(`Storage initialized with policy: ${gameOptions.storagePolicy}`);
+          
+          // Initialize other subsystems
+          if (window.emloop_init_sound) window.emloop_init_sound();
+          if (window.emsocket_init) window.emsocket_init();
+          
+          // Set canvas size
+          if (canvasRef.current) fixGeometry();
+          
+          // Launch the game with proper packs
+          launchGame()
+            .catch(err => {
+              consolePrint(`Error during game launch: ${err}`);
+              setIsLoading(false);
+            })
+            .finally(() => {
+              setIsLoading(false);
+            });
+          
+        }).catch((err) => {
+          consolePrint(`Storage initialization error: ${err}`);
+          setIsLoading(false);
+        });
+      } catch (err) {
+        consolePrint(`Error setting up game: ${err}`);
+        setIsLoading(false);
+      }
+    };
+
+    // Define emloop_request_animation_frame function
+    window.emloop_request_animation_frame = () => {
+      if (window.emloop_pause) window.emloop_pause();
+      window.requestAnimationFrame(() => { 
+        if (window.emloop_unpause) window.emloop_unpause(); 
+      });
+    };
+
+    return () => {
+      // Cleanup global functions
+      delete window.emloop_ready;
+      delete window.emloop_request_animation_frame;
+      delete window.updateProgressBar;
+    };
+  }, [gameOptions]);
+
+  // Initialize the WASM module
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    
+    const canvas = canvasRef.current;
+    const modulePath = `minetest/minetest.js`;
+    
+    // Set up Module configuration for Emscripten
+    window.Module = {
+      preRun: [],
+      postRun: [],
+      print: consolePrint,
+      printErr: (text: string) => consolePrint(`Error: ${text}`),
+      canvas: canvas,
+      onAbort: () => {
+        consolePrint('Fatal error: Emscripten module aborted');
+        onGameStatus('failed');
+      },
+      totalDependencies: 0,
+      monitorRunDependencies: (left: number) => {
+        const deps = Math.max(window.Module.totalDependencies, left);
+        window.Module.totalDependencies = deps;
+        const progress = (deps - left) / deps;
+        consolePrint(`Loading progress: ${Math.round(progress * 100)}%`);
+      },
+      setStatus: (text: string) => {
+        if (text) consolePrint('[wasm module status] ' + text);
+      },
+      onRuntimeInitialized: () => {
+        consolePrint('Runtime initialized, waiting for emloop_ready...');
+      },
+      // Add handlers for file operations to sync with IndexedDB
+      onFileChange: (path: string) => {
+        // Normalize the path
+        path = path.replace(/\/[^\/]+\/\.\.\//g, '/');
+        if (path.startsWith('/minetest/worlds/') && storageManager) {
+          consolePrint(`File changed: ${path}`);
+          try {
+            const statResult = window.Module.FS.stat(path);
+            let isDirectory = (statResult.mode & 0x4000) === 0x4000;
+            if (isDirectory) {
+              storageManager.ensureDirectoryExists(path);
+            } else {
+              const content = window.Module.FS.readFile(path, { encoding: 'binary' });
+              storageManager.persistFile(path, content);
+            }
+          } catch (e) {
+            consolePrint(`Error persisting file: ${path}, ${e}`);
+          }
+        }
+      },
+      onFileDelete: (path: string) => {
+        path = path.replace(/\/[^\/]+\/\.\.\//g, '/');
+        consolePrint(`File deleted: ${path}`);
+        if (storageManager) {
+          storageManager.deleteDirectory(path);
+        }
+      }
+    };
+
+    // Add worker injection script for proper thread communication
+    const workerInject = `
+      Module['print'] = (text) => {
+        postMessage({cmd: 'callHandler', handler: 'print', args: [text], threadId: Module['_pthread_self']()});
+      };
+      Module['printErr'] = (text) => {
+        postMessage({cmd: 'callHandler', handler: 'printErr', args: [text], threadId: Module['_pthread_self']()});
+      };
+      importScripts('minetest.js');
+    `;
+    window.Module['mainScriptUrlOrBlob'] = new Blob([workerInject], { type: "text/javascript" });
+    window.Module['onFullScreen'] = () => { fixGeometry(); };
+    
+    // Function to load the script
+    const loadScript = () => {
+      consolePrint(`Loading WebAssembly module from ${modulePath}...`);
+      const script = document.createElement('script');
+      script.src = modulePath;
+      script.async = true;
+      script.onerror = () => {
+        consolePrint(`Error loading WebAssembly module from ${modulePath}`);
+        onGameStatus('failed');
+      };
+      document.body.appendChild(script);
+    };
+    
+    // Load the module
+    loadScript();
+
+    // Set up resize handling
+    const handleResize = () => fixGeometry();
+    window.addEventListener('resize', handleResize);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [onGameStatus]);
+  
+  // Update geometry when resolution or aspect ratio changes
+  useEffect(() => {
+    fixGeometry();
+  }, [resolution, aspectRatio]);
+
+  return (
+    <div className="min-h-screen w-full flex flex-col bg-black">
+      <div id="header" className="p-2 bg-gray-800 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <select 
+            id="resolution" 
+            className="bg-gray-700 text-white rounded p-1"
+            value={resolution}
+            onChange={handleResolutionChange}
+          >
+            <option value="high">High Res</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low Res</option>
+          </select>
+          
+          <select 
+            id="aspectRatio" 
+            className="bg-gray-700 text-white rounded p-1"
+            value={aspectRatio}
+            onChange={handleAspectRatioChange}
+          >
+            <option value="any">Fit Screen</option>
+            <option value="4:3">4:3</option>
+            <option value="16:9">16:9</option>
+            <option value="5:4">5:4</option>
+            <option value="21:9">21:9</option>
+            <option value="32:9">32:9</option>
+            <option value="1:1">1:1</option>
+          </select>
+          
+          <button 
+            id="console_button" 
+            className="bg-blue-600 hover:bg-blue-700 text-white rounded p-1 px-2"
+            onClick={toggleConsole}
+          >
+            {showConsole ? 'Hide Console' : 'Show Console'}
+          </button>
+          
+          {gameOptions.storagePolicy === 'indexeddb' && (
+            <div className="ml-4 flex items-center gap-2">
+              <span className="text-gray-300 text-sm">
+                Storage used: {(() => {
+                  const stats = storageManager.getFormattedStats();
+                  // Extract numeric values from strings like "8 files (1.25 MB)"
+                  const extractMB = (str: string) => {
+                    const match = str.match(/\(([\d\.]+)\s*([KMG]B)\)/i);
+                    if (match) {
+                      const value = parseFloat(match[1]);
+                      const unit = match[2].toUpperCase();
+                      if (unit === 'KB') return value / 1024;
+                      if (unit === 'MB') return value;
+                      if (unit === 'GB') return value * 1024;
+                    }
+                    return 0;
+                  };
+                  
+                  const worldsMB = extractMB(stats.worlds);
+                  const modsMB = extractMB(stats.mods);
+                  const totalMB = worldsMB + modsMB;
+                  
+                  if (totalMB < 1) {
+                    return `${Math.round(totalMB * 1024)} KB`;
+                  } else {
+                    return `${totalMB.toFixed(2)} MB`;
+                  }
+                })()}
+              </span>
+              <button
+                className="bg-red-600 hover:bg-red-700 text-white text-sm rounded p-1 px-2"
+                onClick={() => {
+                  if (window.confirm('Are you sure you want to clear all saved data?')) {
+                    storageManager.clearStorage('all', true)
+                      .then(() => consolePrint('All storage cleared'))
+                      .catch(err => consolePrint(`Error clearing storage: ${err}`));
+                  }
+                }}
+              >
+                Clear All
+              </button>
+            </div>
+          )}
+          
+          <span className="text-gray-400 text-sm ml-2">
+            (full screen: try F11 or Command+Shift+F)
+          </span>
+        </div>
+        
+        {isLoading && (
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-40 bg-gray-700 rounded-full overflow-hidden">
+              <div className="h-full bg-blue-600 animate-pulse" style={{ width: '100%' }}></div>
+            </div>
+            <span className="text-gray-300 text-sm">Loading...</span>
+          </div>
+        )}
+      </div>
+      
+      <div 
+        id="canvas_container" 
+        ref={canvasContainerRef}
+        className="flex-1 flex items-center justify-center bg-black"
+      >
+        <canvas 
+          ref={canvasRef}
+          id="canvas" 
+          className="emscripten"
+          onContextMenu={(e) => e.preventDefault()}
+          tabIndex={-1}
+        ></canvas>
+      </div>
+      
+      {showConsole && (
+        <div id="footer" className="h-56 bg-gray-900 border-t border-gray-700">
+          <textarea 
+            ref={consoleOutputRef}
+            id="console_output" 
+            className="w-full h-full bg-black text-green-400 font-mono p-2 resize-none"
+            readOnly
+            value={consoleOutput.join('\n')}
+          ></textarea>
+        </div>
+      )}
+      
+      <SnackBar />
+    </div>
+  );
+};
+
+export default RuntimeScreen; 

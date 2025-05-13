@@ -1,0 +1,39 @@
+{
+  "name": "minetest-wasm-ui",
+  "version": "0.1.0",
+  "private": true,
+  "homepage": ".",
+  "dependencies": {
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.4",
+    "@types/react-dom": "^19.1.4",
+    "dexie": "^4.0.11",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "typescript": "^5.8.3",
+    "web-vitals": "^5.0.0"
+  },
+  "scripts": {
+    "start": "npx --yes react-scripts start",
+    "build": "npx --yes react-scripts build",
+    "test": "npx --yes react-scripts test",
+    "eject": "npx --yes react-scripts eject"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^4.1.6"
+  }
+} 
