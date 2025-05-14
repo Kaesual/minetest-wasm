@@ -27,12 +27,6 @@ echo "This is here to ensure bin exists" > bin/readme.txt
 # Copy the irrlicht shaders
 cp -r "$IRRLICHT_REPO/media/Shaders" client/shaders/Irrlicht
 
-rm -rf games/minetest_game
-mkdir -p games
-cp -a "$SOURCES_DIR"/minetest_game games
-cd games/minetest_game
-rm -rf ".git" ".github"
-
 popd
 
 
@@ -54,3 +48,40 @@ popd
 # Compress with ZSTD
 rm -f fsroot.tar.zst
 zstd --ultra -22 fsroot.tar
+
+# Make minetest_game pack
+mkdir -p minetest_game_fsroot/minetest/games
+pushd minetest_game_fsroot/minetest
+cp -a "$SOURCES_DIR"/minetest_game games
+cd games/minetest_game
+rm -rf ".git" ".github"
+popd
+
+# Make minetest_game_fsroot.tar
+rm -f minetest_game_fsroot.tar
+pushd minetest_game_fsroot
+tar cf ../minetest_game_fsroot.tar .
+popd
+
+# Compress with ZSTD
+rm -f minetest_game_fsroot.tar.zst
+zstd --ultra -22 minetest_game_fsroot.tar
+
+# Make voxelibre_game_fsroot.tar
+mkdir -p voxelibre_fsroot/minetest/games
+pushd voxelibre_fsroot/minetest
+cp -a "$SOURCES_DIR"/voxelibre games
+mv games/voxelibre games/mineclone2
+cd games/mineclone2
+rm -rf ".git" ".github"
+popd
+
+# Make voxelibre_fsroot.tar
+rm -f voxelibre_fsroot.tar
+pushd voxelibre_fsroot
+tar cf ../voxelibre_fsroot.tar .
+popd
+
+# Compress with ZSTD
+rm -f voxelibre_fsroot.tar.zst
+zstd --ultra -22 voxelibre_fsroot.tar

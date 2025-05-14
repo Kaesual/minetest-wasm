@@ -37,7 +37,13 @@ echo "Copying React app build to www/"
 cp -a "$BASE_DIR/app/build/." "$WWW_DIR"
 
 # Copy base file system pack
-cp "$BUILD_DIR/fsroot.tar.zst" "$PACKS_DIR/base.pack"
+cp -p "$BUILD_DIR/fsroot.tar.zst" "$PACKS_DIR/base.pack"
+
+# Copy minetest_game pack
+cp -p "$BUILD_DIR/minetest_game_fsroot.tar.zst" "$PACKS_DIR/minetest_game.pack"
+
+# Copy voxelibre_game pack
+cp -p "$BUILD_DIR/voxelibre_fsroot.tar.zst" "$PACKS_DIR/voxelibre.pack"
 
 echo "DONE"
 

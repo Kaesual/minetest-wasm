@@ -31,12 +31,17 @@ class MinetestDatabase extends Dexie {
 export class IDBManagerDexie {
   private db: MinetestDatabase | null = null;
   private dbName: string;
+  private closed: boolean = false;
 
   constructor(dbName: string = 'MinetestWasmWorldsDB') {
     this.dbName = dbName;
   }
 
   async initDB(): Promise<MinetestDatabase> {
+    if (this.closed) {
+      throw new Error('Database has been closed and cannot be reopened. Create a new instance instead.');
+    }
+
     if (this.db) {
       return this.db;
     }
@@ -53,7 +58,30 @@ export class IDBManagerDexie {
     }
   }
 
+  async close(): Promise<void> {
+    if (!this.db) {
+      // Already closed or never initialized
+      this.closed = true;
+      return;
+    }
+
+    try {
+      this.db.close();
+      console.log('IDBManagerDexie: Database closed successfully.');
+    } catch (error) {
+      console.error('IDBManagerDexie: Error closing database:', error);
+      throw new Error('Error closing database: ' + error);
+    } finally {
+      this.db = null;
+      this.closed = true;
+    }
+  }
+
   private async ensureDbInitialized(): Promise<MinetestDatabase> {
+    if (this.closed) {
+      throw new Error('Database has been closed. Create a new instance instead.');
+    }
+    
     if (!this.db) {
       throw new Error('Database not initialized. Call initDB() first.');
     }

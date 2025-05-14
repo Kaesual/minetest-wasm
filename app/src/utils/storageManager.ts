@@ -37,6 +37,11 @@ export class StorageManager {
   
   // Initialize storage manager
   async initialize(storageOptions: { policy: string }, moduleFS: any): Promise<void> {
+    if (this.storagePolicy === storageOptions.policy && this.fs === moduleFS) {
+      console.log('StorageManager: Already initialized with identical policy and moduleFS');
+      return;
+    }
+
     this.storagePolicy = storageOptions.policy;
     this.fs = moduleFS;
 
@@ -50,41 +55,40 @@ export class StorageManager {
 
     if (storageOptions.policy === 'indexeddb') {
       try {
-        const idbManagerInstance = new IDBManagerDexie();
-        await idbManagerInstance.initDB();
-        this.idbManager = idbManagerInstance;
-        console.log('StorageManager: IndexedDB initialized for persistence.');
+        if (!this.idbManager) {
+          const idbManagerInstance = new IDBManagerDexie();
+          await idbManagerInstance.initDB();
+          this.idbManager = idbManagerInstance;
+          console.log('StorageManager: IndexedDB initialized for persistence.');
+        }
         
         // Load worlds data from IndexedDB
-        await this.initialLoadFromIDB(idbManagerInstance, moduleFS, this.WORLDS_SYNC_BASE_PATH);
+        await this.copyIdbToFs(this.WORLDS_SYNC_BASE_PATH);
         
         // Also load mods data from IndexedDB
-        await this.initialLoadFromIDB(idbManagerInstance, moduleFS, this.MODS_SYNC_BASE_PATH);
+        await this.copyIdbToFs(this.MODS_SYNC_BASE_PATH);
         
-        await this.updateStorageStats(idbManagerInstance);
+        this.updateStorageStats(this.idbManager);
       } catch (e) {
         console.error('StorageManager: Failed to initialize IndexedDB backend.', e);
         this.storagePolicy = 'no-storage';
         return Promise.reject(e);
       }
     }
-    return Promise.resolve();
   }
 
   // Load files from IndexedDB to the filesystem
-  private async initialLoadFromIDB(
-    idbManager: IDBManagerDexie, 
-    moduleFS: any, 
+  private async copyIdbToFs(
     basePath: string
   ): Promise<void> {
-    if (!moduleFS || !idbManager) {
+    if (!this.fs || !this.idbManager) {
       console.error('StorageManager-IDB: Module.FS or IDBManager not available for initial load.');
       return Promise.reject('FS or IDBManager not ready for IDB load');
     }
     
     console.log('StorageManager-IDB: Starting initial load from IndexedDB for path: ' + basePath);
     try {
-      const files = await idbManager.getAllFiles(basePath);
+      const files = await this.idbManager.getAllFiles(basePath);
       if (files.length === 0) {
         console.log('StorageManager-IDB: No files found in IndexedDB under ' + basePath + ' to preload.');
         return;
@@ -95,8 +99,8 @@ export class StorageManager {
         try {
           // Create directory if it doesn't exist
           const dir = file.path.substring(0, file.path.lastIndexOf('/'));
-          if (dir && !moduleFS.analyzePath(dir).exists) {
-            moduleFS.mkdirTree(dir);
+          if (dir && !this.fs.analyzePath(dir).exists) {
+            this.fs.mkdirTree(dir);
           }
           
           // Ensure content is properly typed for writing to filesystem
@@ -105,7 +109,7 @@ export class StorageManager {
               file.content : 
               new Uint8Array(file.content);
               
-            moduleFS.writeFile(file.path, content);
+            this.fs.writeFile(file.path, content);
           } else {
             console.warn(`StorageManager-IDB: Empty content for file ${file.path}, skipping`);
           }
@@ -124,7 +128,7 @@ export class StorageManager {
   private async updateStorageStats(idbManager: IDBManagerDexie): Promise<void> {
     try {
       // Get all worlds files from IndexedDB
-      const worldFiles = await idbManager.getAllFiles(this.WORLDS_SYNC_BASE_PATH);
+      const worldFiles = await idbManager.getAllFiles(this.WORLDS_SYNC_BASE_PATH); 
       let worldsSize = 0;
       
       // Calculate total size of world files
