@@ -254,6 +254,12 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
         </p>
 
         <p className="mt-4 italic">
+          Note: This Common Ground plugin is not affiliated with the Minetest project.
+          It started as a showcase of community gaming by one of the Common Ground
+          founders, and then went beyond that.
+        </p>
+
+        <p className="mt-4 italic">
           <b>Updates</b>
           <ul className="simple-list">
             <li>Added persistent storage support with IndexedDB to save your worlds.</li>

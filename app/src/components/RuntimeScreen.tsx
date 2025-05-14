@@ -37,6 +37,7 @@ declare global {
     _malloc: (size: number) => number;
     _free: (ptr: number) => void;
     HEAPU8: Uint8Array;
+    HEAPU32: Uint32Array;
   }
 }
 
@@ -236,21 +237,10 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
     // Allocate memory for pointers (4 bytes per pointer)
     const argv = window._malloc((args.length + 1) * 4);
     let i;
-    
-    // Set up the argument pointers
     for (i = 0; i < args.length; i++) {
-      // Convert JS string to UTF8, get pointer, and store in argv array
-      const ptr = window.stringToNewUTF8(args[i]);
-      // HEAPU32[(argv >> 2) + i] = ptr;
-      // Since we don't have direct access to HEAPU32, we use Uint32Array view
-      const view = new Uint32Array(window.HEAPU8.buffer, argv + i * 4, 1);
-      view[0] = ptr;
+      window.HEAPU32[(argv >>> 2) + i] = window.stringToNewUTF8(args[i]);
     }
-    
-    // Set the last element to null (C standard)
-    const view = new Uint32Array(window.HEAPU8.buffer, argv + i * 4, 1);
-    view[0] = 0;
-    
+    window.HEAPU32[(argv >>> 2) + i] = 0; // argv[argc] == NULL
     return [i, argv];
   }, []);
 
@@ -285,11 +275,11 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
 
       // Set graphics/performance settings
       const conf = {
-        // 'viewing_range': '140',
-        // 'max_block_send_distance': '10',
-        // 'max_block_generate_distance': '10',
-        // 'block_send_optimize_distance': '10',
-        // 'client_mapblock_limit': '8000',
+        'viewing_range': '140',
+        'max_block_send_distance': '10',
+        'max_block_generate_distance': '10',
+        'block_send_optimize_distance': '10',
+        'client_mapblock_limit': '8000',
         'no_mtg_notification': 'true',
         'language': gameOptions.language
       };
@@ -645,7 +635,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
         <canvas 
           ref={canvasRef}
           id="canvas" 
-          className="emscripten"
+          className="emscripten m-0 p-0"
           onContextMenu={(e) => e.preventDefault()}
           tabIndex={-1}
         ></canvas>
