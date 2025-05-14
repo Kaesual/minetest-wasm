@@ -75,7 +75,7 @@ export const GlobalProvider: React.FC<{children: React.ReactNode}> = ({ children
   const storageManagerRef = useRef<StorageManager | null>(null);
   const [prefetchStatus, setPrefetchStatus] = useState<GlobalContextType["prefetch"]>(initialPrefetchStatus);
 
-  const [messages, setMessages] = useState<GlobalContextType["minetestConsole"]["messages"]>([]);
+  const [messages, setMessages] = useState<GlobalContextType["minetestConsole"]["messages"]>(["Console initialized"]);
 
   const consolePrint = useCallback((text: string) => {
     console.log(`Minetest Console: ${text}`);

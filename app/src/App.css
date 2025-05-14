@@ -1,1 +1,17 @@
-/* App specific styles can be added here */ 
+/* App specific styles can be added here */
+
+.simple-list {
+  @apply ml-6 mb-4 list-disc;
+
+  li {
+    @apply mb-2;
+  }
+}
+
+.simple-list-non-bulleted {
+  @apply ml-2 mb-4 list-none;
+
+  li {
+    @apply mb-2;
+  }
+}

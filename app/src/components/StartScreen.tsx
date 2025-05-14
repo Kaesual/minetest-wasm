@@ -199,7 +199,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
   return (
     <div 
       id="start_screen" 
-      className="grid grid-cols-1 md:grid-cols-2 gap-8 w-screen h-screen p-8 overflow-y-auto relative"
+      className="grid grid-cols-1 md:grid-cols-2 gap-8 w-screen h-screen p-8 overflow-hidden relative"
       style={{
         backgroundImage: `url('assets/minetest_screenshot.webp')`,
         backgroundSize: 'cover',
@@ -209,19 +209,20 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
       {/* Overlay to darken the background */}
       <div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm -z-10"></div>
       
-      <div id="start_screen_left" className="flex flex-col justify-start p-5 overflow-y-auto rounded-xl text-lg bg-white bg-opacity-20 border border-white border-opacity-30 shadow-lg my-5 h-[calc(100vh-100px)] max-h-[calc(100vh-100px)] thin_scrollbar">
+      <div id="start_screen_left" className="flex flex-col justify-start p-5 overflow-y-auto rounded-xl text-lg bg-black bg-opacity-50 shadow-lg my-5 h-[calc(100vh-100px)] max-h-[calc(100vh-100px)] thin_scrollbar">
         <div id="start_screen_left_caption" className="flex flex-row items-center gap-4 text-4xl font-bold mb-8">
-          <img src={`assets/minetest-icon.svg`} alt="Minetest Logo" className="w-12 h-12" />
-          Minetest for the Web
+          <img src={`assets/minetest_logo.svg`} alt="Minetest Logo" className="w-20 h-20" />
+          Minetest
         </div>
         
         <p className="mb-4">
           Welcome to the web version of Minetest, a free and open-source voxel game engine.
         </p>
-        
+
         <p className="mb-4">
           This is a full-featured port of Minetest to the web using WebAssembly, allowing you to play
-          directly in your browser without installing anything.
+          directly in your browser without installing anything. There are some important things to know,
+          so please read to the end of this screen.
         </p>
         
         <h2 className="text-2xl font-bold mt-4 mb-2">Controls</h2>
@@ -229,14 +230,46 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
           <li className="mb-2">WASD - Movement</li>
           <li className="mb-2">Space - Jump</li>
           <li className="mb-2">Shift - Sneak</li>
-          <li className="mb-2">E - Inventory</li>
+          <li className="mb-2">I - Inventory</li>
           <li className="mb-2">Mouse - Look around</li>
           <li className="mb-2">1-8 - Hotbar slots</li>
-          <li className="mb-2">Tab - Player list</li>
+          <li className="mb-2">N/B - Switch through hotbar slots</li>
+          <li className="mb-2">C - Switch camera mode</li>
+          <li className="mb-2">V - Switch minimap mode</li>
+          <li className="mb-2">T/ESC - Toggle ingame console</li>
+          <li className="mb-2">+/- - Change view distance</li>
+          <li className="mb-2">ESC - Menu</li>
         </ul>
+
+        <p className="mt-4">
+          When you stop playing, always leave the world by opening the menu with ESC and selecting "Main menu". Then, wait several seconds before closing the Minetest plugin, to make sure your world saves are stored in your browser.
+        </p>
+
+        <p className="mt-4">
+          You can toggle the game into fullscreen mode in the CG Sidebar.
+        </p>
         
-        <p className="mt-4 italic">
+        <p className="mt-4">
           Play responsibly and enjoy building in this blocky world!
+        </p>
+
+        <p className="mt-4 italic">
+          <b>Updates</b>
+          <ul className="simple-list">
+            <li>Added persistent storage support with IndexedDB to save your worlds.</li>
+            <li>Enhanced local storage management with statistics and cleanup tools.</li>
+          </ul>
+        </p>
+          
+        <p className="mt-4 italic">
+          <b>A Tribute to the creators</b>
+          <ul className="simple-list-non-bulleted">
+            <li>Thanks to the Minetest team for the great game engine!</li>
+            <li>Thanks to paradust7 for the WebAssembly port!</li>
+            <li>Thanks to the Creators of Voxelibre, a Minecraft-like game mode for Minetest!</li>
+            <li>Thanks to TSamuel for providing the Minetest logo on Wikipedia!</li>
+            <li>Thanks to everyone contributing to open source software!</li>
+          </ul>
         </p>
       </div>
       
