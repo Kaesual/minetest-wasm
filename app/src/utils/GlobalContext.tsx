@@ -1,5 +1,11 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { StorageManager } from './storageManager';
+
+export interface MinetestConsole {
+  print: (text: string) => void;
+  printErr: (text: string) => void;
+  messages: string[];
+}
 
 interface GlobalContextType {
   storageManager: StorageManager | null;
@@ -13,6 +19,7 @@ interface GlobalContextType {
       voxelibre: number | 'done' | 'error';
     };
   };
+  minetestConsole: MinetestConsole;
 }
 
 const initialPrefetchStatus: GlobalContextType["prefetch"] = {
@@ -26,10 +33,17 @@ const initialPrefetchStatus: GlobalContextType["prefetch"] = {
   }
 };
 
+const initialMinetestConsole: MinetestConsole = {
+  print: () => {},
+  printErr: () => {},
+  messages: []
+};
+
 // Create the context with appropriate type
 const GlobalContext = createContext<GlobalContextType>({
   storageManager: null,
-  prefetch: initialPrefetchStatus
+  prefetch: initialPrefetchStatus,
+  minetestConsole: initialMinetestConsole
 });
 
 export const useStorageManager = () => {
@@ -48,10 +62,36 @@ export const usePrefetchData = () => {
   return context.prefetch;
 };
 
+export const useMinetestConsole = () => {
+  const context = useContext(GlobalContext);
+  if (!context) {
+    throw new Error('useMinetestConsole must be used within a GlobalProvider');
+  }
+  return context.minetestConsole;
+};
+
 export const GlobalProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   // Use ref to maintain a single instance of StorageManager across renders
   const storageManagerRef = useRef<StorageManager | null>(null);
   const [prefetchStatus, setPrefetchStatus] = useState<GlobalContextType["prefetch"]>(initialPrefetchStatus);
+
+  const [messages, setMessages] = useState<GlobalContextType["minetestConsole"]["messages"]>([]);
+
+  const consolePrint = useCallback((text: string) => {
+    console.log(`Minetest Console: ${text}`);
+    setMessages(prev => [...prev, text]);
+  }, []);
+
+  const consolePrintErr = useCallback((text: string) => {
+    console.log(`Minetest Console Error: ${text}`);
+    setMessages(prev => [...prev, text]);
+  }, []);
+
+  const minetestConsole = useMemo(() => ({
+    print: consolePrint,
+    printErr: consolePrintErr,
+    messages
+  }), [consolePrint, consolePrintErr, messages]);
     
   const prefetch = useCallback(async (name: 'base' | 'voxelibre') => {
     const packUrl = `minetest/packs/${name}.pack`;
@@ -145,7 +185,8 @@ export const GlobalProvider: React.FC<{children: React.ReactNode}> = ({ children
   return (
     <GlobalContext.Provider value={{
       storageManager: storageManagerRef.current,
-      prefetch: prefetchStatus
+      prefetch: prefetchStatus,
+      minetestConsole
     }}>
       {children}
     </GlobalContext.Provider>

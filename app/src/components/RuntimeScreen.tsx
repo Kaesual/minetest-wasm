@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useLayoutEffect, useCallback } from 'react';
-import { usePrefetchData, useStorageManager } from '../utils/GlobalContext';
+import { MinetestConsole, useMinetestConsole, usePrefetchData, useStorageManager } from '../utils/GlobalContext';
 import SnackBar from './SnackBar';
 import { type GameOptions } from '@/App';
 
@@ -37,7 +37,6 @@ declare global {
     _malloc: (size: number) => number;
     _free: (ptr: number) => void;
     HEAPU8: Uint8Array;
-    updateProgressBar?: (doneBytes: number, neededBytes: number) => void;
   }
 }
 
@@ -46,10 +45,10 @@ class PackManager {
   private addedPacks = new Set<string>();
   private installedPacks = new Set<string>();
   private packPromises = new Map<string, Promise<void>>();
-  private progressCallback?: (name: string, progress: number) => void;
+  private minetestConsole: MinetestConsole;
   
-  constructor(progressCallback?: (name: string, progress: number) => void) {
-    this.progressCallback = progressCallback;
+  constructor(minetestConsole: MinetestConsole) {
+    this.minetestConsole = minetestConsole;
   }
   
   async addPack(name: string, prefetchData: Uint8Array): Promise<void> {
@@ -70,7 +69,7 @@ class PackManager {
   
   async installPrefetchedPack(name: string, prefetchData: Uint8Array): Promise<void> {
     if (!window._malloc || !window.stringToNewUTF8 || !window.emloop_install_pack || !window._free) {
-      console.error(`Required WASM functions not available to install pack: ${name}`);
+      this.minetestConsole.printErr(`Required WASM functions not available to install pack: ${name}`);
       return Promise.reject(`Required WASM functions not available`);
     }
     try {
@@ -90,13 +89,10 @@ class PackManager {
       
       this.installedPacks.add(name);
       
-      if (this.progressCallback) {
-        this.progressCallback(`install:${name}`, 1.0);
-      }
-      
-      console.log(`Successfully installed pack: ${name}`);
+      this.minetestConsole.print(`Successfully installed pack: ${name}`);
     } catch (error) {
-      console.error(`Error installing pack ${name}:`, error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.minetestConsole.printErr(`Error installing pack ${name}:` + errorMessage);
       return Promise.reject(error);
     }
   }
@@ -106,44 +102,26 @@ class PackManager {
   }
 }
 
-// Create a global updateProgressBar function
-window.updateProgressBar = (doneBytes: number, neededBytes: number) => {
-  // This would be implemented similarly to the original launcher.js if needed
-  console.log(`Progress: downloaded ${doneBytes} bytes of ${neededBytes}`);
-};
-
 const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const [showConsole, setShowConsole] = useState(false);
-  const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
   const [resolution, setResolution] = useState('high');
   const [aspectRatio, setAspectRatio] = useState('any');
-  const consoleOutputRef = useRef<HTMLTextAreaElement>(null);
   const storageManager = useStorageManager();
   const prefetchData = usePrefetchData();
+  const minetestConsole = useMinetestConsole();
   const [isLoading, setIsLoading] = useState(true);
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   const settingsTimeoutRef = useRef<number | null>(null);
-  const [packManager] = useState(() => new PackManager((name, progress) => {
-    consolePrint(`Task ${name} : ${Math.round(progress * 100)}%`);
-  }));
-  
-  // Function to handle console output
-  const consolePrint = (text: string) => {
-    setConsoleOutput(prev => [...prev, text]);
-    console.log(text); // Also log to browser console
-    
-    // Scroll to bottom on next tick
-    setTimeout(() => {
-      if (consoleOutputRef.current) {
-        consoleOutputRef.current.scrollTop = consoleOutputRef.current.scrollHeight;
-      }
-    }, 0);
-  };
+  const [packManager] = useState(() => new PackManager(minetestConsole));
   
   // Function to fix canvas geometry based on selected options
-  const fixGeometry = () => {
+  const resolutionRef = useRef(resolution);
+  const aspectRatioRef = useRef(aspectRatio);
+  resolutionRef.current = resolution;
+  aspectRatioRef.current = aspectRatio;
+  const fixGeometry = useCallback(() => {
     if (!canvasRef.current || !canvasContainerRef.current) return;
     
     const canvas = canvasRef.current;
@@ -158,7 +136,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
     
     // Apply resolution setting
     let resolutionFactor = 1.0;
-    switch(resolution) {
+    switch(resolutionRef.current) {
       case 'low':
         resolutionFactor = 0.5;
         break;
@@ -175,8 +153,8 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
     targetHeight *= resolutionFactor;
     
     // Apply aspect ratio constraint if needed
-    if (aspectRatio !== 'any') {
-      const ratioValues = aspectRatio.split(':').map(Number);
+    if (aspectRatioRef.current !== 'any') {
+      const ratioValues = aspectRatioRef.current.split(':').map(Number);
       if (ratioValues.length === 2 && !ratioValues.includes(NaN)) {
         const targetRatio = ratioValues[0] / ratioValues[1];
         const currentRatio = targetWidth / targetHeight;
@@ -203,48 +181,55 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
     if (window.Module && window.irrlicht_resize) {
       window.irrlicht_resize(canvas.width, canvas.height);
     }
-  };
+  }, []);
   
   // Handle aspect ratio change
-  const handleAspectRatioChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleAspectRatioChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     setAspectRatio(e.target.value);
-  };
+  }, []);
   
   // Handle resolution change
-  const handleResolutionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleResolutionChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     setResolution(e.target.value);
-  };
+  }, []);
   
   // Toggle console visibility
-  const toggleConsole = () => {
+  const toggleConsole = useCallback(() => {
     setShowConsole(prev => !prev);
-  };
+  }, []);
 
   // Set minetest.conf options
-  const setMinetestConf = (key: string, value: string) => {
+  const setMinetestConf = useCallback((config: Record<string, string>) => {
     if (window.emloop_set_minetest_conf && window.stringToNewUTF8) {
-      const confLine = `${key} = ${value}\n`;
-      const confBuf = window.stringToNewUTF8(confLine);
-      window.emloop_set_minetest_conf(confBuf);
-      window._free(confBuf);
-      consolePrint(`Set config: ${key} = ${value}`);
+      const confLines = [];
+      for (const [key, value] of Object.entries(config)) {
+        const confLine = `${key} = ${value}`;
+        confLines.push(confLine);
+      }
+      if (confLines.length > 0) {
+        const confTxt = confLines.join('\n') + '\n';
+        const confBuf = window.stringToNewUTF8(confTxt);
+        window.emloop_set_minetest_conf(confBuf);
+        window._free(confBuf);
+        minetestConsole.print(`Set config:\n${confTxt}`);
+      }
     }
-  };
+  }, []);
 
   // Apply proxy setting
-  const setProxy = (proxyUrl: string) => {
+  const setProxy = useCallback((proxyUrl: string) => {
     if (window.emsocket_set_proxy && window.stringToNewUTF8) {
       const proxyBuf = window.stringToNewUTF8(proxyUrl);
       window.emsocket_set_proxy(proxyBuf);
       window._free(proxyBuf);
-      consolePrint(`Set proxy: ${proxyUrl}`);
+      minetestConsole.print(`Set proxy: ${proxyUrl}`);
     }
-  };
+  }, []);
 
   // Function to create argv for main
-  const makeArgv = (args: string[]) => {
+  const makeArgv = useCallback((args: string[]) => {
     if (!window._malloc || !window.HEAPU8 || !window.stringToNewUTF8) {
-      consolePrint("Error: Required Emscripten functions not available");
+      minetestConsole.printErr("Error: Required Emscripten functions not available");
       return [0, 0];
     }
     
@@ -267,18 +252,31 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
     view[0] = 0;
     
     return [i, argv];
-  };
+  }, []);
 
   // Launch the game with the current settings
   const launchGame = async () => {
     try {
-      consolePrint("Installing required game packs...");
+      // Initialize the storage manager with the selected storage policy
+      await storageManager!.initialize(
+        { policy: gameOptions.storagePolicy }, 
+        window.Module.FS
+      );
       
-      // Todo: FIXME! prefetchData.result.base! is undefined
-      // TODO: FIXME! prefetchData.result.voxelibre! is undefined
+      minetestConsole.print(`Storage initialized with policy: ${gameOptions.storagePolicy}`);
+      
+      // Initialize other subsystems
+      if (window.emloop_init_sound) window.emloop_init_sound();
+      if (window.emsocket_init) window.emsocket_init();
+      
+      // Set canvas size
+      if (canvasRef.current) fixGeometry();
+
+      minetestConsole.print("Installing required game packs...");
+      
       // Always install the base pack first
       await packManager.addPack('base', prefetchData.result.base!);
-      
+
       // Install the minetest_game pack, very basic game, but it's a good test
       // await packManager.addPack('minetest_game');
 
@@ -286,28 +284,30 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       await packManager.addPack('voxelibre', prefetchData.result.voxelibre!);
 
       // Set graphics/performance settings
-      setMinetestConf('viewing_range', '140');
-      setMinetestConf('max_block_send_distance', '10');
-      setMinetestConf('max_block_generate_distance', '10');
-      setMinetestConf('block_send_optimize_distance', '10');
-      setMinetestConf('client_mapblock_limit', '8000');
-      setMinetestConf('no_mtg_notification', 'true');
+      const conf = {
+        // 'viewing_range': '140',
+        // 'max_block_send_distance': '10',
+        // 'max_block_generate_distance': '10',
+        // 'block_send_optimize_distance': '10',
+        // 'client_mapblock_limit': '8000',
+        'no_mtg_notification': 'true',
+        'language': gameOptions.language
+      };
+
+      setMinetestConf(conf);
       
-      // Set language
-      setMinetestConf('language', gameOptions.language);
-      
+      // Set up arguments - don't use --go flag to start in menu mode
+      const args = ['./minetest'];
+      const [argc, argv] = makeArgv(args);
+
       // Set proxy
       if (window.emsocket_set_proxy) {
         setProxy(gameOptions.proxy);
       }
       
-      // Set up arguments - don't use --go flag to start in menu mode
-      const args = ['./minetest'];
-      const [argc, argv] = makeArgv(args);
-      
       // Launch the game
       if (window.emloop_invoke_main) {
-        consolePrint("Starting Minetest...");
+        minetestConsole.print("Starting Minetest...");
         window.emloop_invoke_main(argc, argv);
         
         // Need to pause/unpause to let the browser redraw the DOM
@@ -321,9 +321,11 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
         }
       }
     } catch (error) {
-      consolePrint(`Error launching game: ${error}`);
+      minetestConsole.printErr(`Error launching game: ${error}`);
       setIsLoading(false);
       onGameStatus('failed');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -331,7 +333,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
   useLayoutEffect(() => {
     // Define the emloop_ready function that will be called by the WASM module
     window.emloop_ready = () => {
-      consolePrint("emloop_ready called. Setting up functions...");
+      minetestConsole.print("emloop_ready called. Setting up functions...");
       
       try {
         // Setup cwrapped functions - copied from original launcher.js
@@ -348,38 +350,11 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
         window.emsocket_set_proxy = window.cwrap("emsocket_set_proxy", null, ["number"]);
         window.emsocket_set_vpn = window.cwrap("emsocket_set_vpn", null, ["number"]);
 
-        consolePrint("Successfully wrapped Emscripten functions");
+        minetestConsole.print("Successfully wrapped Emscripten functions");
 
-        // Initialize the storage manager with the selected storage policy
-        storageManager!.initialize(
-          { policy: gameOptions.storagePolicy }, 
-          window.Module.FS
-        ).then(() => {
-          consolePrint(`Storage initialized with policy: ${gameOptions.storagePolicy}`);
-          
-          // Initialize other subsystems
-          if (window.emloop_init_sound) window.emloop_init_sound();
-          if (window.emsocket_init) window.emsocket_init();
-          
-          // Set canvas size
-          if (canvasRef.current) fixGeometry();
-          
-          // Launch the game with proper packs
-          launchGame()
-            .catch(err => {
-              consolePrint(`Error during game launch: ${err}`);
-              setIsLoading(false);
-            })
-            .finally(() => {
-              setIsLoading(false);
-            });
-          
-        }).catch((err) => {
-          consolePrint(`Storage initialization error: ${err}`);
-          setIsLoading(false);
-        });
+        launchGame();
       } catch (err) {
-        consolePrint(`Error setting up game: ${err}`);
+        minetestConsole.printErr(`Error setting up game: ${err}`);
         setIsLoading(false);
       }
     };
@@ -396,9 +371,8 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       // Cleanup global functions
       delete window.emloop_ready;
       delete window.emloop_request_animation_frame;
-      delete window.updateProgressBar;
     };
-  }, [gameOptions]);
+  }, []);
 
   // Initialize the WASM module
   useEffect(() => {
@@ -411,11 +385,11 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
     window.Module = {
       preRun: [],
       postRun: [],
-      print: consolePrint,
-      printErr: (text: string) => consolePrint(`Error: ${text}`),
+      print: minetestConsole.print,
+      printErr: minetestConsole.printErr,
       canvas: canvas,
       onAbort: () => {
-        consolePrint('Fatal error: Emscripten module aborted');
+        minetestConsole.printErr('Fatal error: Emscripten module aborted');
         onGameStatus('failed');
       },
       totalDependencies: 0,
@@ -423,20 +397,20 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
         const deps = Math.max(window.Module.totalDependencies, left);
         window.Module.totalDependencies = deps;
         const progress = (deps - left) / deps;
-        consolePrint(`Loading progress: ${Math.round(progress * 100)}%`);
+        minetestConsole.print(`Loading progress: ${Math.round(progress * 100)}%`);
       },
       setStatus: (text: string) => {
-        if (text) consolePrint('[wasm module status] ' + text);
+        if (text) minetestConsole.print('[wasm module status] ' + text);
       },
       onRuntimeInitialized: () => {
-        consolePrint('Runtime initialized, waiting for emloop_ready...');
+        minetestConsole.print('Runtime initialized, waiting for emloop_ready...');
       },
       // Add handlers for file operations to sync with IndexedDB
       onFileChange: (path: string) => {
         // Normalize the path
         path = path.replace(/\/[^\/]+\/\.\.\//g, '/');
         if (path.startsWith('/minetest/worlds/') && storageManager) {
-          consolePrint(`File changed: ${path}`);
+          minetestConsole.print(`File changed: ${path}`);
           try {
             const statResult = window.Module.FS.stat(path);
             let isDirectory = (statResult.mode & 0x4000) === 0x4000;
@@ -447,16 +421,16 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
               storageManager.persistFile(path, content);
             }
           } catch (e) {
-            consolePrint(`Error persisting file: ${path}, ${e}`);
+            minetestConsole.printErr(`Error persisting file: ${path}, ${e}`);
           }
         }
         else {
-          consolePrint(`File changed (no sync): ${path}`);
+          minetestConsole.print(`File changed (no sync): ${path}`);
         }
       },
       onFileDelete: (path: string) => {
         path = path.replace(/\/[^\/]+\/\.\.\//g, '/');
-        consolePrint(`File deleted: ${path}`);
+        minetestConsole.print(`File deleted: ${path}`);
         if (storageManager) {
           storageManager.deleteDirectory(path);
         }
@@ -478,13 +452,16 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
     
     // Function to load the script
     const loadScript = () => {
-      consolePrint(`Loading WebAssembly module from ${modulePath}...`);
+      minetestConsole.print(`Loading WebAssembly module from ${modulePath}...`);
       const script = document.createElement('script');
       script.src = modulePath;
       script.async = true;
       script.onerror = () => {
-        consolePrint(`Error loading WebAssembly module from ${modulePath}`);
+        minetestConsole.printErr(`Error loading WebAssembly module from ${modulePath}`);
         onGameStatus('failed');
+      };
+      script.onload = () => {
+        minetestConsole.print('WebAssembly module loaded successfully');
       };
       document.body.appendChild(script);
     };
@@ -507,14 +484,14 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
   }, [resolution, aspectRatio]);
 
   // Handle settings panel expansion
-  const expandSettings = () => {
+  const expandSettings = useCallback(() => {
     setSettingsExpanded(true);
     // Clear any existing timeout
     if (settingsTimeoutRef.current !== null) {
       window.clearTimeout(settingsTimeoutRef.current);
       settingsTimeoutRef.current = null;
     }
-  };
+  }, []);
   
   // Handle settings panel collapse with delay
   const collapseSettingsWithDelay = useCallback(() => {
@@ -694,11 +671,10 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
             </button>
           </div>
           <textarea 
-            ref={consoleOutputRef}
             id="console_output" 
             className="w-full h-[calc(100%-32px)] bg-transparent text-green-400 font-mono p-3 resize-none focus:outline-none"
             readOnly
-            value={consoleOutput.join('\n')}
+            value={minetestConsole.messages.join('\n')}
           ></textarea>
         </div>
       )}

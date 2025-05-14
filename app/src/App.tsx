@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import StartScreen from './components/StartScreen';
 import RuntimeScreen from './components/RuntimeScreen';
 import GlobalProvider from './utils/GlobalContext';
@@ -9,8 +9,6 @@ export interface GameOptions {
   language: string;
   proxy: string;
   storagePolicy: string;
-  prefetchResponse_base?: Response;
-  prefetchResponse_voxelibre?: Response;
 }
 
 function App() {
@@ -21,24 +19,24 @@ function App() {
     storagePolicy: 'indexeddb'
   });
 
-  const handleStartGame = (options: GameOptions) => {
+  const handleStartGame = useCallback((options: GameOptions) => {
     setGameOptions(options);
     setIsGameStarted(true);
-  };
+  }, []);
   
-  const handleUpdateOptions = (options: Partial<GameOptions>) => {
+  const handleUpdateOptions = useCallback((options: Partial<GameOptions>) => {
     setGameOptions(prevOptions => ({
       ...prevOptions,
       ...options
     }));
-  };
+  }, []);
   
-  const handleGameStatus = (status: 'running' | 'failed') => {
+  const handleGameStatus = useCallback((status: 'running' | 'failed') => {
     if (status === 'failed') {
       // If game fails to start, go back to start screen
       setIsGameStarted(false);
     }
-  };
+  }, []);
 
   return (
     <div className="min-h-screen w-full bg-gray-900 text-white">

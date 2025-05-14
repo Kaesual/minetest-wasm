@@ -1,17 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { usePrefetchData, useStorageManager } from '../utils/GlobalContext';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useMinetestConsole, usePrefetchData, useStorageManager } from '../utils/GlobalContext';
 import { type GameOptions } from '@/App';
-
-// Define interfaces for language and proxy options
-interface LanguageOption {
-  code: string;
-  name: string;
-}
-
-interface ProxyOption {
-  url: string;
-  region: string;
-}
 
 interface StartScreenProps {
   onStartGame: (options: GameOptions) => void;
@@ -20,16 +9,16 @@ interface StartScreenProps {
 }
 
 const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions, currentOptions }) => {
-  const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState<string>(currentOptions.language);
   const [selectedProxy, setSelectedProxy] = useState<number>(0);
   const [selectedStorage, setSelectedStorage] = useState<string>(currentOptions.storagePolicy);
+  const [isPreloading, setIsPreloading] = useState(true);
   const prefetchData = usePrefetchData();
-  const storageManager = useStorageManager();
+  const minetestConsole = useMinetestConsole();
   
   // Language options from the original launcher.js
-  const SUPPORTED_LANGUAGES: [string, string][] = [
+  const SUPPORTED_LANGUAGES: [string, string][] = useMemo(() => [
     ['be', "Беларуская [be]"],
     ['bg', "Български [bg]"],
     ['ca', "Català [ca]"],
@@ -82,16 +71,16 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
     ['vi', "Tiếng Việt [vi]"],
     ['zh_CN', "中文 (简体) [zh_CN]"],
     ['zh_TW', "正體中文 (繁體) [zh_TW]"],
-  ];
+  ], []);
   
   // Proxy options from the original index.html
-  const proxies: [string, string][] = [
+  const proxies: [string, string][] = useMemo(() => [
     ["wss://na1.dustlabs.io/mtproxy", "North America"],
     ["wss://sa1.dustlabs.io/mtproxy", "South America"],
     ["wss://eu1.dustlabs.io/mtproxy", "Europe"],
     ["wss://ap1.dustlabs.io/mtproxy", "Asia"],
     ["wss://ap2.dustlabs.io/mtproxy", "Australia"],
-  ];
+  ], []);
 
   // Find the initial proxy index based on currentOptions
   useEffect(() => {
@@ -100,6 +89,13 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
       setSelectedProxy(index);
     }
   }, [currentOptions.proxy]);
+
+  // Set isPreloading to false when the prefetching is done
+  useEffect(() => {
+    if (Object.values(prefetchData.status).every(status => status === 'done')) {
+      setIsPreloading(false);
+    }
+  }, [prefetchData.status]);
 
   // Set default language based on browser locale
   useEffect(() => {
@@ -183,23 +179,19 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
       console.log('Starting game with options:', {
         language: selectedLanguage,
         proxy: proxyUrl,
-        storagePolicy: selectedStorage,
-        prefetchResponse_base: currentOptions.prefetchResponse_base ? 'Loaded' : 'Not loaded',
-        prefetchResponse_voxelibre: currentOptions.prefetchResponse_voxelibre ? 'Loaded' : 'Not loaded'
+        storagePolicy: selectedStorage
       });
       
       // Pass the selected options to the parent component
       onStartGame({
         language: selectedLanguage,
         proxy: proxyUrl,
-        storagePolicy: selectedStorage,
-        prefetchResponse_base: currentOptions.prefetchResponse_base,
-        prefetchResponse_voxelibre: currentOptions.prefetchResponse_voxelibre
+        storagePolicy: selectedStorage
       });
       
     } catch (error) {
       console.error('Error starting game:', error);
-      setConsoleOutput(prev => [...prev, `Error: ${error}`]);
+      minetestConsole.printErr(`Error: ${error}`);
       setIsLoading(false);
     }
   };
@@ -316,18 +308,18 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
           
           <button 
             onClick={handleStartGame}
-            disabled={isLoading}
+            disabled={isLoading || isPreloading}
             className={`w-full p-4 rounded-lg text-white font-bold shadow-md transition transform hover:translate-y-[-2px] ${
               isLoading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >
-            {isLoading ? 'Loading...' : 'Start Game'}
+            {isLoading || isPreloading ? 'Loading...' : 'Start Game'}
           </button>
         </div>
         
         <div className="bg-black bg-opacity-75 p-4 rounded-xl h-64 overflow-y-auto thin_scrollbar">
           <pre className="text-green-400 font-mono text-sm whitespace-pre-wrap">
-            {consoleOutput.length > 0 ? consoleOutput.join('\n') : 'Console output will appear here...'}
+            {minetestConsole.messages.length > 0 ? minetestConsole.messages.join('\n') : 'Console output will appear here...'}
           </pre>
         </div>
         
