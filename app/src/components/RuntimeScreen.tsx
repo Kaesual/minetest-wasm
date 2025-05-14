@@ -339,7 +339,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       await packManager.addPack('base');
       
       // Install the minetest_game pack, very basic game, but it's a good test
-      await packManager.addPack('minetest_game');
+      // await packManager.addPack('minetest_game');
 
       // Install the voxelibre pack
       await packManager.addPack('voxelibre');
@@ -350,6 +350,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       setMinetestConf('max_block_generate_distance', '10');
       setMinetestConf('block_send_optimize_distance', '10');
       setMinetestConf('client_mapblock_limit', '8000');
+      setMinetestConf('no_mtg_notification', 'true');
       
       // Set language
       setMinetestConf('language', gameOptions.language);
