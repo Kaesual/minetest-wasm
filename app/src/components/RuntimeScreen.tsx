@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useLayoutEffect, useCallback } from 'react';
-import { useStorageManager } from '../utils/storageManagerContext';
+import { usePrefetchData, useStorageManager } from '../utils/GlobalContext';
 import SnackBar from './SnackBar';
+import { type GameOptions } from '@/App';
 
 // Define global types to match the original launcher.js
 interface Window {
@@ -10,11 +11,7 @@ interface Window {
 }
 
 interface RuntimeScreenProps {
-  gameOptions: {
-    language: string;
-    proxy: string;
-    storagePolicy: string;
-  };
+  gameOptions: GameOptions;
   onGameStatus: (status: 'running' | 'failed') => void;
 }
 
@@ -55,7 +52,7 @@ class PackManager {
     this.progressCallback = progressCallback;
   }
   
-  async addPack(name: string): Promise<void> {
+  async addPack(name: string, prefetchData: Uint8Array): Promise<void> {
     if (name === 'devtest' || this.addedPacks.has(name)) {
       return;
     }
@@ -66,76 +63,22 @@ class PackManager {
       return this.packPromises.get(name);
     }
     
-    const promise = this.fetchAndInstallPack(name);
+    const promise = this.installPrefetchedPack(name, prefetchData);
     this.packPromises.set(name, promise);
     return promise;
   }
   
-  async fetchAndInstallPack(name: string): Promise<void> {
+  async installPrefetchedPack(name: string, prefetchData: Uint8Array): Promise<void> {
     if (!window._malloc || !window.stringToNewUTF8 || !window.emloop_install_pack || !window._free) {
       console.error(`Required WASM functions not available to install pack: ${name}`);
       return Promise.reject(`Required WASM functions not available`);
     }
-    
-    const packUrl = `minetest/packs/${name}.pack`;
-    
     try {
-      console.log(`Fetching pack: ${packUrl}`);
-      const response = await fetch(packUrl);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch pack ${name}: ${response.status} ${response.statusText}`);
-      }
-      
-      const contentLength = response.headers.get('Content-Length');
-      let totalSize = contentLength ? parseInt(contentLength, 10) : 0;
-      
-      // Update progress bar
-      if (window.updateProgressBar) {
-        window.updateProgressBar(0, totalSize);
-      }
-      
-      // Read the response body
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error(`Cannot read response body for pack ${name}`);
-      }
-      
-      const chunks: Uint8Array[] = [];
-      let receivedLength = 0;
-      
-      while (true) {
-        const {done, value} = await reader.read();
-        
-        if (done) {
-          break;
-        }
-        
-        chunks.push(value);
-        receivedLength += value.length;
-        
-        // Report progress
-        if (window.updateProgressBar) {
-          window.updateProgressBar(value.length, 0);
-        }
-        
-        if (this.progressCallback) {
-          this.progressCallback(`download:${name}`, receivedLength / (totalSize || 1));
-        }
-      }
-      
-      // Combine all chunks into a single Uint8Array
-      const allData = new Uint8Array(receivedLength);
-      let position = 0;
-      
-      for (const chunk of chunks) {
-        allData.set(chunk, position);
-        position += chunk.length;
-      }
+      const receivedLength = prefetchData.length;
       
       // Allocate memory and copy the data
       const dataPtr = window._malloc(receivedLength);
-      window.HEAPU8.set(allData, dataPtr);
+      window.HEAPU8.set(prefetchData, dataPtr);
       
       // Install the pack
       const namePtr = window.stringToNewUTF8(name);
@@ -161,11 +104,6 @@ class PackManager {
   isPackInstalled(name: string): boolean {
     return this.installedPacks.has(name);
   }
-  
-  async addMultiplePacks(packs: string[]): Promise<void> {
-    const promises = packs.map(pack => this.addPack(pack));
-    return Promise.all(promises).then(() => {});
-  }
 }
 
 // Create a global updateProgressBar function
@@ -183,6 +121,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
   const [aspectRatio, setAspectRatio] = useState('any');
   const consoleOutputRef = useRef<HTMLTextAreaElement>(null);
   const storageManager = useStorageManager();
+  const prefetchData = usePrefetchData();
   const [isLoading, setIsLoading] = useState(true);
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   const settingsTimeoutRef = useRef<number | null>(null);
@@ -335,14 +274,16 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
     try {
       consolePrint("Installing required game packs...");
       
+      // Todo: FIXME! prefetchData.result.base! is undefined
+      // TODO: FIXME! prefetchData.result.voxelibre! is undefined
       // Always install the base pack first
-      await packManager.addPack('base');
+      await packManager.addPack('base', prefetchData.result.base!);
       
       // Install the minetest_game pack, very basic game, but it's a good test
       // await packManager.addPack('minetest_game');
 
       // Install the voxelibre pack
-      await packManager.addPack('voxelibre');
+      await packManager.addPack('voxelibre', prefetchData.result.voxelibre!);
 
       // Set graphics/performance settings
       setMinetestConf('viewing_range', '140');
@@ -410,7 +351,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
         consolePrint("Successfully wrapped Emscripten functions");
 
         // Initialize the storage manager with the selected storage policy
-        storageManager.initialize(
+        storageManager!.initialize(
           { policy: gameOptions.storagePolicy }, 
           window.Module.FS
         ).then(() => {
@@ -508,6 +449,9 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
           } catch (e) {
             consolePrint(`Error persisting file: ${path}, ${e}`);
           }
+        }
+        else {
+          consolePrint(`File changed (no sync): ${path}`);
         }
       },
       onFileDelete: (path: string) => {
@@ -681,7 +625,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
                   </svg>
                   <span className="text-gray-300 text-sm">
                     {(() => {
-                      const stats = storageManager.getFormattedStats();
+                      const stats = storageManager!.getFormattedStats();
                       const extractMB = (str: string) => {
                         const match = str.match(/\(([\d\.]+)\s*([KMG]B)\)/i);
                         if (match) {

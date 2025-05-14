@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import StartScreen from './components/StartScreen';
 import RuntimeScreen from './components/RuntimeScreen';
-import StorageManagerProvider from './utils/storageManagerContext';
+import GlobalProvider from './utils/GlobalContext';
 import './App.css';
 
 // Define the game options interface
-interface GameOptions {
+export interface GameOptions {
   language: string;
   proxy: string;
   storagePolicy: string;
+  prefetchResponse_base?: Response;
+  prefetchResponse_voxelibre?: Response;
 }
 
 function App() {
@@ -40,7 +42,7 @@ function App() {
 
   return (
     <div className="min-h-screen w-full bg-gray-900 text-white">
-      <StorageManagerProvider>
+      <GlobalProvider>
         {!isGameStarted ? (
           <StartScreen 
             onStartGame={handleStartGame}
@@ -48,9 +50,12 @@ function App() {
             currentOptions={gameOptions}
           />
         ) : (
-          <RuntimeScreen gameOptions={gameOptions} onGameStatus={handleGameStatus} />
+          <RuntimeScreen
+            gameOptions={gameOptions}
+            onGameStatus={handleGameStatus}
+          />
         )}
-      </StorageManagerProvider>
+      </GlobalProvider>
     </div>
   );
 }

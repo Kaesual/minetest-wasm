@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useStorageManager } from '../utils/storageManagerContext';
+import { usePrefetchData, useStorageManager } from '../utils/GlobalContext';
+import { type GameOptions } from '@/App';
 
 // Define interfaces for language and proxy options
 interface LanguageOption {
@@ -10,12 +11,6 @@ interface LanguageOption {
 interface ProxyOption {
   url: string;
   region: string;
-}
-
-interface GameOptions {
-  language: string;
-  proxy: string;
-  storagePolicy: string;
 }
 
 interface StartScreenProps {
@@ -30,6 +25,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
   const [selectedLanguage, setSelectedLanguage] = useState<string>(currentOptions.language);
   const [selectedProxy, setSelectedProxy] = useState<number>(0);
   const [selectedStorage, setSelectedStorage] = useState<string>(currentOptions.storagePolicy);
+  const prefetchData = usePrefetchData();
   const storageManager = useStorageManager();
   
   // Language options from the original launcher.js
@@ -187,14 +183,18 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
       console.log('Starting game with options:', {
         language: selectedLanguage,
         proxy: proxyUrl,
-        storagePolicy: selectedStorage
+        storagePolicy: selectedStorage,
+        prefetchResponse_base: currentOptions.prefetchResponse_base ? 'Loaded' : 'Not loaded',
+        prefetchResponse_voxelibre: currentOptions.prefetchResponse_voxelibre ? 'Loaded' : 'Not loaded'
       });
       
       // Pass the selected options to the parent component
       onStartGame({
         language: selectedLanguage,
         proxy: proxyUrl,
-        storagePolicy: selectedStorage
+        storagePolicy: selectedStorage,
+        prefetchResponse_base: currentOptions.prefetchResponse_base,
+        prefetchResponse_voxelibre: currentOptions.prefetchResponse_voxelibre
       });
       
     } catch (error) {
@@ -292,6 +292,26 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
               <option value="indexeddb">IndexedDB (Save worlds and mods)</option>
               <option value="no-storage">No Storage (Nothing saved)</option>
             </select>
+          </div>
+          
+          {/* Display prefetching status */}
+          <div className="mb-4 mt-2">
+            <div className="flex justify-between items-center">
+              <span>Game packs:</span>
+              <span className="text-sm">
+                {Object.entries(prefetchData.status).length === 0 ? 'Waiting to load' : 
+                 Object.values(prefetchData.status).every(status => status === 'done') ? 
+                 'All packs loaded ✓' : 'Loading...'}
+              </span>
+            </div>
+            <div className="mt-2">
+              {Object.entries(prefetchData.status).map(([file, status]) => (
+                <div key={file} className="text-xs flex justify-between">
+                  <span>{file.split('/').pop()}</span>
+                  <span>{typeof status === 'number' ? status > 100 ? `${Math.floor(status / 1000)}kB ⏳` : `${Math.floor(status * 100)}% ⏳` : status === 'done' ? '✓' : '❌'}</span>
+                </div>
+              ))}
+            </div>
           </div>
           
           <button 
