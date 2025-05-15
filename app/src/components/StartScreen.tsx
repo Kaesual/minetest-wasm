@@ -1,11 +1,23 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useMinetestConsole, usePrefetchData, useStorageManager } from '../utils/GlobalContext';
-import { type GameOptions } from '@/App';
+import { type GameOptions } from '../App';
+import { PROXIES, SUPPORTED_LANGUAGES } from '../utils/common';
+
+// Define game modes
+type GameMode = 'local' | 'host' | 'join';
 
 interface StartScreenProps {
   onStartGame: (options: GameOptions) => void;
   onUpdateOptions: (options: Partial<GameOptions>) => void;
   currentOptions: GameOptions;
+}
+
+// Define form validation interface
+interface FormValidation {
+  playerName: boolean;
+  joinCode: boolean;
+  newGameName: boolean;
+  gameSelection: boolean;
 }
 
 const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions, currentOptions }) => {
@@ -14,77 +26,45 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
   const [selectedProxy, setSelectedProxy] = useState<number>(0);
   const [selectedStorage, setSelectedStorage] = useState<string>(currentOptions.storagePolicy);
   const [isPreloading, setIsPreloading] = useState(true);
+  const [gameMode, setGameMode] = useState<GameMode>('local');
+  const [playerName, setPlayerName] = useState<string>('');
+  const [joinCode, setJoinCode] = useState<string>('');
+  const [selectedGame, setSelectedGame] = useState<string>('');
+  const [newGameName, setNewGameName] = useState<string>('');
+  const [existingGames, setExistingGames] = useState<string[]>([]);
+  const [validationErrors, setValidationErrors] = useState<FormValidation>({
+    playerName: true,
+    joinCode: true,
+    newGameName: true,
+    gameSelection: true
+  });
+  const [touched, setTouched] = useState<FormValidation>({
+    playerName: false,
+    joinCode: false,
+    newGameName: false,
+    gameSelection: false
+  });
+  const storageManager = useStorageManager();
   const prefetchData = usePrefetchData();
   const minetestConsole = useMinetestConsole();
-  
-  // Language options from the original launcher.js
-  const SUPPORTED_LANGUAGES: [string, string][] = useMemo(() => [
-    ['be', "Беларуская [be]"],
-    ['bg', "Български [bg]"],
-    ['ca', "Català [ca]"],
-    ['cs', "Česky [cs]"],
-    ['cy', "Cymraeg [cy]"],
-    ['da', "Dansk [da]"],
-    ['de', "Deutsch [de]"],
-    ['el', "Ελληνικά [el]"],
-    ['en', "English [en]"],
-    ['eo', "Esperanto [eo]"],
-    ['es', "Español [es]"],
-    ['et', "Eesti [et]"],
-    ['eu', "Euskara [eu]"],
-    ['fi', "Suomi [fi]"],
-    ['fil', "Wikang Filipino [fil]"],
-    ['fr', "Français [fr]"],
-    ['gd', "Gàidhlig [gd]"],
-    ['gl', "Galego [gl]"],
-    ['hu', "Magyar [hu]"],
-    ['id', "Bahasa Indonesia [id]"],
-    ['it', "Italiano [it]"],
-    ['ja', "日本語 [ja]"],
-    ['jbo', "Lojban [jbo]"],
-    ['kk', "Қазақша [kk]"],
-    ['ko', "한국어 [ko]"],
-    ['ky', "Kırgızca / Кыргызча [ky]"],
-    ['lt', "Lietuvių [lt]"],
-    ['lv', "Latviešu [lv]"],
-    ['mn', "Монгол [mn]"],
-    ['mr', "मराठी [mr]"],
-    ['ms', "Bahasa Melayu [ms]"],
-    ['nb', "Norsk Bokmål [nb]"],
-    ['nl', "Nederlands [nl]"],
-    ['nn', "Norsk Nynorsk [nn]"],
-    ['oc', "Occitan [oc]"],
-    ['pl', "Polski [pl]"],
-    ['pt', "Português [pt]"],
-    ['pt_BR', "Português do Brasil [pt_BR]"],
-    ['ro', "Română [ro]"],
-    ['ru', "Русский [ru]"],
-    ['sk', "Slovenčina [sk]"],
-    ['sl', "Slovenščina [sl]"],
-    ['sr_Cyrl', "Српски [sr_Cyrl]"],
-    ['sr_Latn', "Srpski (Latinica) [sr_Latn]"],
-    ['sv', "Svenska [sv]"],
-    ['sw', "Kiswahili [sw]"],
-    ['tr', "Türkçe [tr]"],
-    ['tt', "Tatarça [tt]"],
-    ['uk', "Українська [uk]"],
-    ['vi', "Tiếng Việt [vi]"],
-    ['zh_CN', "中文 (简体) [zh_CN]"],
-    ['zh_TW', "正體中文 (繁體) [zh_TW]"],
-  ], []);
-  
-  // Proxy options from the original index.html
-  const proxies: [string, string][] = useMemo(() => [
-    ["wss://na1.dustlabs.io/mtproxy", "North America"],
-    ["wss://sa1.dustlabs.io/mtproxy", "South America"],
-    ["wss://eu1.dustlabs.io/mtproxy", "Europe"],
-    ["wss://ap1.dustlabs.io/mtproxy", "Asia"],
-    ["wss://ap2.dustlabs.io/mtproxy", "Australia"],
-  ], []);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!!storageManager && storageManager?.isInitialized === false) {
+      storageManager.initialize({ policy: selectedStorage }).then(() => {
+        mounted && storageManager.getWorlds().then(worlds => {
+          mounted && setExistingGames(worlds);
+        });
+      });
+    }
+    return () => {
+      mounted = false;
+    }
+  }, [storageManager]);
 
   // Find the initial proxy index based on currentOptions
   useEffect(() => {
-    const index = proxies.findIndex(proxy => proxy[0] === currentOptions.proxy);
+    const index = PROXIES.findIndex(proxy => proxy[0] === currentOptions.proxy);
     if (index !== -1) {
       setSelectedProxy(index);
     }
@@ -149,6 +129,44 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
     }
   }, []);
 
+  // Validate form fields
+  useEffect(() => {
+    const errors = {
+      playerName: true,
+      joinCode: true,
+      newGameName: true,
+      gameSelection: true
+    };
+
+    // Validate player name for host and join modes
+    if ((gameMode === 'host' || gameMode === 'join') && !playerName.trim()) {
+      errors.playerName = false;
+    }
+
+    // Validate join code for join mode
+    if (gameMode === 'join' && !joinCode.trim()) {
+      errors.joinCode = false;
+    }
+
+    // Validate game selection for host mode
+    if (gameMode === 'host') {
+      // If creating a new game, validate new game name
+      if (selectedGame === '') {
+        // Check if name is valid (a-zA-Z0-9 and spaces, 1-20 chars)
+        const isValid = /^[\w\s]{1,20}$/.test(newGameName) && !existingGames.includes(newGameName);
+        errors.newGameName = newGameName.trim() !== '' && isValid;
+      } else {
+        // If an existing game is selected, this validation is passed
+        errors.newGameName = true;
+      }
+      
+      // Validate that either an existing game is selected or a new game name is provided
+      errors.gameSelection = selectedGame !== '' || (selectedGame === '' && errors.newGameName);
+    }
+
+    setValidationErrors(errors);
+  }, [gameMode, playerName, joinCode, selectedGame, newGameName, existingGames]);
+
   // Handle language change
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newLanguage = e.target.value;
@@ -160,7 +178,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
   const handleProxyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const index = parseInt(e.target.value);
     setSelectedProxy(index);
-    onUpdateOptions({ proxy: proxies[index][0] });
+    onUpdateOptions({ proxy: PROXIES[index][0] });
   };
   
   // Handle storage policy change
@@ -170,24 +188,74 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
     onUpdateOptions({ storagePolicy: newPolicy });
   };
   
+  // Handle game mode change
+  const handleGameModeChange = (mode: GameMode) => {
+    setGameMode(mode);
+    
+    // Reset touched state when changing mode
+    setTouched({
+      playerName: false,
+      joinCode: false,
+      newGameName: false,
+      gameSelection: false
+    });
+  };
+
+  // Mark field as touched
+  const markAsTouched = (field: keyof FormValidation) => {
+    setTouched(prev => ({ ...prev, [field]: true }));
+  };
+  
+  // Check if form is valid
+  const isFormValid = useMemo(() => {
+    if (gameMode === 'local') return true;
+    
+    if (gameMode === 'host') {
+      return validationErrors.playerName && validationErrors.gameSelection;
+    }
+    
+    if (gameMode === 'join') {
+      return validationErrors.playerName && validationErrors.joinCode;
+    }
+    
+    return false;
+  }, [gameMode, validationErrors]);
+  
   const handleStartGame = async () => {
     setIsLoading(true);
     try {
       // Get the selected proxy URL from the array
-      const proxyUrl = proxies[selectedProxy][0];
+      const proxyUrl = PROXIES[selectedProxy][0];
       
-      console.log('Starting game with options:', {
+      // Prepare game options
+      const gameOptions: GameOptions = {
         language: selectedLanguage,
         proxy: proxyUrl,
-        storagePolicy: selectedStorage
-      });
+        storagePolicy: selectedStorage,
+        minetestArgs: currentOptions.minetestArgs,
+        mode: gameMode
+      };
+      
+      // Add additional options based on game mode
+      if (gameMode === 'host' || gameMode === 'join') {
+        gameOptions.playerName = playerName;
+      }
+      
+      if (gameMode === 'host') {
+        gameOptions.selectedGame = selectedGame !== '' ? selectedGame : undefined;
+        if (selectedGame === '') {
+          gameOptions.newGameName = newGameName;
+        }
+      }
+      
+      if (gameMode === 'join') {
+        gameOptions.joinCode = joinCode;
+      }
+      
+      console.log('Starting game with options:', gameOptions);
       
       // Pass the selected options to the parent component
-      onStartGame({
-        language: selectedLanguage,
-        proxy: proxyUrl,
-        storagePolicy: selectedStorage
-      });
+      onStartGame(gameOptions);
       
     } catch (error) {
       console.error('Error starting game:', error);
@@ -279,7 +347,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
         </p>
       </div>
       
-      <div id="start_screen_right" className="flex flex-col gap-5 p-5 rounded-xl">
+      <div id="start_screen_right" className="flex flex-col gap-5 p-5 rounded-xl overflow-y-auto thin_scrollbar h-[calc(100vh-100px)] max-h-[calc(100vh-100px)]">
         <div className="bg-black bg-opacity-50 text-white p-5 rounded-xl shadow-lg">
           <h2 className="text-2xl font-bold mb-4">Launch Options</h2>
           
@@ -306,7 +374,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
                 value={selectedProxy}
                 onChange={handleProxyChange}
               >
-                {proxies.map(([url, region], index) => (
+                {PROXIES.map(([url, region], index) => (
                   <option key={url} value={index}>{region}</option>
                 ))}
               </select>
@@ -320,8 +388,8 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
               value={selectedStorage}
               onChange={handleStoragePolicyChange}
             >
-              <option value="indexeddb">IndexedDB (Save worlds and mods)</option>
-              <option value="no-storage">No Storage (Nothing saved)</option>
+              <option value="indexeddb">Save worlds in browser</option>
+              <option value="no-storage">No Storage</option>
             </select>
           </div>
           
@@ -345,21 +413,143 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
             </div>
           </div>
           
+          {/* Game Mode Selection */}
+          <div className="mb-5">
+            <label className="block mb-2">Game Mode</label>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => handleGameModeChange('local')}
+                className={`flex-1 p-3 rounded-lg transition ${gameMode === 'local' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-black hover:bg-gray-300'}`}
+              >
+                Local only
+              </button>
+              <button 
+                onClick={() => handleGameModeChange('host')}
+                className={`flex-1 p-3 rounded-lg transition ${gameMode === 'host' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-black hover:bg-gray-300'}`}
+              >
+                Host game
+              </button>
+              <button 
+                onClick={() => handleGameModeChange('join')}
+                className={`flex-1 p-3 rounded-lg transition ${gameMode === 'join' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-black hover:bg-gray-300'}`}
+              >
+                Join game
+              </button>
+            </div>
+          </div>
+          
+          {/* Form fields for the selected game mode */}
+          {gameMode === 'host' && (
+            <div className="mb-5 p-4 border border-gray-300 rounded-lg">
+              <h3 className="text-xl mb-3">Host Game Settings</h3>
+              
+              <div className="mb-3">
+                <label className="block mb-1">
+                  Player Name {touched.playerName && !validationErrors.playerName && <span className="text-yellow-300 text-sm">*required</span>}
+                </label>
+                <input 
+                  type="text" 
+                  value={playerName}
+                  onChange={(e) => setPlayerName(e.target.value)}
+                  onBlur={() => markAsTouched('playerName')}
+                  className={`w-full p-2 rounded-lg border-2 ${touched.playerName && !validationErrors.playerName ? 'border-yellow-300' : 'border-gray-300'} bg-white text-black`}
+                  placeholder="Enter your player name"
+                  maxLength={20}
+                />
+              </div>
+              
+              <div className="mb-3">
+                <label className="block mb-1">Game Selection</label>
+                <select 
+                  className={`w-full p-2 rounded-lg border-2 ${touched.gameSelection && !validationErrors.gameSelection ? 'border-yellow-300' : 'border-gray-300'} bg-white text-black`}
+                  value={selectedGame}
+                  onChange={(e) => {
+                    setSelectedGame(e.target.value);
+                    markAsTouched('gameSelection');
+                  }}
+                >
+                  <option value="" disabled>Please choose</option>
+                  <option value="/">Create new game</option>
+                  {existingGames.map(game => (
+                    <option key={game} value={game}>{game}</option>
+                  ))}
+                </select>
+              </div>
+              
+              {selectedGame === '/' && (
+                <div className="mb-3">
+                  <label className="block mb-1">
+                    New Game Name {touched.newGameName && !validationErrors.newGameName && <span className="text-yellow-300 text-sm">*required, use only letters, numbers, and spaces (max 20 chars)</span>}
+                  </label>
+                  <input 
+                    type="text" 
+                    value={newGameName}
+                    onChange={(e) => setNewGameName(e.target.value)}
+                    onBlur={() => markAsTouched('newGameName')}
+                    className={`w-full p-2 rounded-lg border-2 ${touched.newGameName && !validationErrors.newGameName ? 'border-yellow-300' : 'border-gray-300'} bg-white text-black`}
+                    placeholder="Enter name for new game"
+                    maxLength={20}
+                  />
+                  {touched.newGameName && newGameName.trim() !== '' && existingGames.includes(newGameName) && (
+                    <div className="text-yellow-300 text-sm mt-1">This game name already exists</div>
+                  )}
+                </div>
+              )}
+              
+              <div className="text-sm text-yellow-300 mt-2">
+                <strong>Note:</strong> Make sure to tell your friends which proxy you're using!
+              </div>
+            </div>
+          )}
+          
+          {gameMode === 'join' && (
+            <div className="mb-5 p-4 border border-gray-300 rounded-lg">
+              <h3 className="text-xl mb-3">Join Game Settings</h3>
+              
+              <div className="mb-3">
+                <label className="block mb-1">
+                  Player Name {touched.playerName && !validationErrors.playerName && <span className="text-yellow-300 text-sm">*required</span>}
+                </label>
+                <input 
+                  type="text" 
+                  value={playerName}
+                  onChange={(e) => setPlayerName(e.target.value)}
+                  onBlur={() => markAsTouched('playerName')}
+                  className={`w-full p-2 rounded-lg border-2 ${touched.playerName && !validationErrors.playerName ? 'border-yellow-300' : 'border-gray-300'} bg-white text-black`}
+                  placeholder="Enter your player name"
+                  maxLength={20}
+                />
+              </div>
+              
+              <div className="mb-3">
+                <label className="block mb-1">
+                  Join Code {touched.joinCode && !validationErrors.joinCode && <span className="text-yellow-300 text-sm">*required</span>}
+                </label>
+                <input 
+                  type="text" 
+                  value={joinCode}
+                  onChange={(e) => setJoinCode(e.target.value)}
+                  onBlur={() => markAsTouched('joinCode')}
+                  className={`w-full p-2 rounded-lg border-2 ${touched.joinCode && !validationErrors.joinCode ? 'border-yellow-300' : 'border-gray-300'} bg-white text-black`}
+                  placeholder="Enter the code from your friend"
+                />
+              </div>
+              
+              <div className="text-sm text-yellow-300 mt-2">
+                <strong>Note:</strong> You must select the same proxy as the host!
+              </div>
+            </div>
+          )}
+          
           <button 
             onClick={handleStartGame}
-            disabled={isLoading || isPreloading}
+            disabled={isLoading || isPreloading || !isFormValid}
             className={`w-full p-4 rounded-lg text-white font-bold shadow-md transition transform hover:translate-y-[-2px] ${
-              isLoading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+              isLoading || isPreloading || !isFormValid ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >
             {isLoading || isPreloading ? 'Loading...' : 'Start Game'}
           </button>
-        </div>
-        
-        <div className="bg-black bg-opacity-75 p-4 rounded-xl h-64 overflow-y-auto thin_scrollbar">
-          <pre className="text-green-400 font-mono text-sm whitespace-pre-wrap">
-            {minetestConsole.messages.length > 0 ? minetestConsole.messages.join('\n') : 'Console output will appear here...'}
-          </pre>
         </div>
         
         <div className="text-xs text-center text-gray-300 mt-2">

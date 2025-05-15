@@ -3,12 +3,19 @@ import StartScreen from './components/StartScreen';
 import RuntimeScreen from './components/RuntimeScreen';
 import GlobalProvider from './utils/GlobalContext';
 import './App.css';
+import MinetestArgs from './utils/MinetestArgs';
 
 // Define the game options interface
 export interface GameOptions {
   language: string;
   proxy: string;
   storagePolicy: string;
+  minetestArgs: MinetestArgs;
+  mode?: 'local' | 'host' | 'join';
+  playerName?: string;
+  joinCode?: string;
+  selectedGame?: string;
+  newGameName?: string;
 }
 
 function App() {
@@ -16,7 +23,8 @@ function App() {
   const [gameOptions, setGameOptions] = useState<GameOptions>({
     language: 'en',
     proxy: 'wss://na1.dustlabs.io/mtproxy',
-    storagePolicy: 'indexeddb'
+    storagePolicy: 'indexeddb',
+    minetestArgs: new MinetestArgs()
   });
 
   const handleStartGame = useCallback((options: GameOptions) => {

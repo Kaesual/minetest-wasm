@@ -39,7 +39,10 @@ class MinetestArgs {
     }
 
     static fromJSON(json: string) {
-        return JSON.parse(json);
+        const parsed = JSON.parse(json);
+        const args = new MinetestArgs();
+        Object.assign(args, parsed);
+        return args;
     }
 }
 

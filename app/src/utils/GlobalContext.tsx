@@ -7,22 +7,24 @@ export interface MinetestConsole {
   messages: string[];
 }
 
+export interface PrefetchStatus {
+  result: {
+    base: Uint8Array | null;
+    voxelibre: Uint8Array | null;
+  };
+  status: {
+    base: number | 'done' | 'error';
+    voxelibre: number | 'done' | 'error';
+  };
+}
+
 interface GlobalContextType {
   storageManager: StorageManager | null;
-  prefetch: {
-    result: {
-      base: Uint8Array | null;
-      voxelibre: Uint8Array | null;
-    };
-    status: {
-      base: number | 'done' | 'error';
-      voxelibre: number | 'done' | 'error';
-    };
-  };
+  prefetch: PrefetchStatus;
   minetestConsole: MinetestConsole;
 }
 
-const initialPrefetchStatus: GlobalContextType["prefetch"] = {
+const initialPrefetchStatus: PrefetchStatus = {
   result: {
     base: null,
     voxelibre: null

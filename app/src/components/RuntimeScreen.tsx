@@ -1,14 +1,7 @@
 import React, { useEffect, useRef, useState, useLayoutEffect, useCallback } from 'react';
 import { MinetestConsole, useMinetestConsole, usePrefetchData, useStorageManager } from '../utils/GlobalContext';
 import SnackBar from './SnackBar';
-import { type GameOptions } from '@/App';
-
-// Define global types to match the original launcher.js
-interface Window {
-  emloop_ready: () => void;
-  emloop_request_animation_frame: () => void;
-  Module: any;
-}
+import { type GameOptions } from '../App';
 
 interface RuntimeScreenProps {
   gameOptions: GameOptions;
@@ -41,33 +34,66 @@ declare global {
   }
 }
 
+function queryProxy(cmd: string, proxy: string) {
+  return new Promise((resolve, reject) => {
+    let finished = false;
+    const ws = new WebSocket(proxy);
+    ws.addEventListener('open', (event) => {
+      ws.send(cmd);
+    });
+    ws.addEventListener('error', (event) => {
+      alert('Error initiating proxy connection');
+      finished = true;
+      reject(new Error('Received error'));
+    });
+    ws.addEventListener('close', (event) => {
+      if (!finished) {
+        alert('Proxy connection closed unexpectedly');
+        finished = true;
+        reject(new Error('Received close'));
+      }
+    });
+    ws.addEventListener('message', (event) => {
+      if (typeof event.data !== 'string') {
+        alert('Invalid message received from proxy');
+        finished = true;
+        reject(new Error('Invalid message'));
+        return;
+      }
+      finished = true;
+      ws.close();
+      resolve(event.data.split(' '));
+    });
+  });
+}
+
 // Class to handle resource packs similar to the original launcher
 class PackManager {
   private addedPacks = new Set<string>();
   private installedPacks = new Set<string>();
   private packPromises = new Map<string, Promise<void>>();
   private minetestConsole: MinetestConsole;
-  
+
   constructor(minetestConsole: MinetestConsole) {
     this.minetestConsole = minetestConsole;
   }
-  
+
   async addPack(name: string, prefetchData: Uint8Array): Promise<void> {
     if (name === 'devtest' || this.addedPacks.has(name)) {
       return;
     }
-    
+
     this.addedPacks.add(name);
-    
+
     if (this.packPromises.has(name)) {
       return this.packPromises.get(name);
     }
-    
+
     const promise = this.installPrefetchedPack(name, prefetchData);
     this.packPromises.set(name, promise);
     return promise;
   }
-  
+
   async installPrefetchedPack(name: string, prefetchData: Uint8Array): Promise<void> {
     if (!window._malloc || !window.stringToNewUTF8 || !window.emloop_install_pack || !window._free) {
       this.minetestConsole.printErr(`Required WASM functions not available to install pack: ${name}`);
@@ -75,21 +101,21 @@ class PackManager {
     }
     try {
       const receivedLength = prefetchData.length;
-      
+
       // Allocate memory and copy the data
       const dataPtr = window._malloc(receivedLength);
       window.HEAPU8.set(prefetchData, dataPtr);
-      
+
       // Install the pack
       const namePtr = window.stringToNewUTF8(name);
       window.emloop_install_pack(namePtr, dataPtr, receivedLength);
-      
+
       // Free the memory
       window._free(namePtr);
       window._free(dataPtr);
-      
+
       this.installedPacks.add(name);
-      
+
       this.minetestConsole.print(`Successfully installed pack: ${name}`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -97,7 +123,7 @@ class PackManager {
       return Promise.reject(error);
     }
   }
-  
+
   isPackInstalled(name: string): boolean {
     return this.installedPacks.has(name);
   }
@@ -116,7 +142,9 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
   const [settingsExpanded, setSettingsExpanded] = useState(false);
   const settingsTimeoutRef = useRef<number | null>(null);
   const [packManager] = useState(() => new PackManager(minetestConsole));
-  
+  const [vpnServerCode, setVpnServerCode] = useState<string | null>(null);
+  const [vpnClientCode, setVpnClientCode] = useState<string | null>(null);
+
   // Function to fix canvas geometry based on selected options
   const resolutionRef = useRef(resolution);
   const aspectRatioRef = useRef(aspectRatio);
@@ -124,20 +152,20 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
   aspectRatioRef.current = aspectRatio;
   const fixGeometry = useCallback(() => {
     if (!canvasRef.current || !canvasContainerRef.current) return;
-    
+
     const canvas = canvasRef.current;
     const container = canvasContainerRef.current;
-    
+
     // Get container dimensions
     const containerWidth = container.clientWidth;
     const containerHeight = container.clientHeight;
-    
+
     let targetWidth = containerWidth;
     let targetHeight = containerHeight;
-    
+
     // Apply resolution setting
     let resolutionFactor = 1.0;
-    switch(resolutionRef.current) {
+    switch (resolutionRef.current) {
       case 'low':
         resolutionFactor = 0.5;
         break;
@@ -149,17 +177,17 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
         resolutionFactor = 1.0;
         break;
     }
-    
+
     targetWidth *= resolutionFactor;
     targetHeight *= resolutionFactor;
-    
+
     // Apply aspect ratio constraint if needed
     if (aspectRatioRef.current !== 'any') {
       const ratioValues = aspectRatioRef.current.split(':').map(Number);
       if (ratioValues.length === 2 && !ratioValues.includes(NaN)) {
         const targetRatio = ratioValues[0] / ratioValues[1];
         const currentRatio = targetWidth / targetHeight;
-        
+
         if (currentRatio > targetRatio) {
           // Too wide, adjust width
           targetWidth = targetHeight * targetRatio;
@@ -169,31 +197,31 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
         }
       }
     }
-    
+
     // Set canvas dimensions
     canvas.width = Math.floor(targetWidth);
     canvas.height = Math.floor(targetHeight);
-    
+
     // Set CSS dimensions to handle any scaling
     canvas.style.width = '100%';
     canvas.style.height = '100%';
-    
+
     // Notify the Module if it exists
     if (window.Module && window.irrlicht_resize) {
       window.irrlicht_resize(canvas.width, canvas.height);
     }
   }, []);
-  
+
   // Handle aspect ratio change
   const handleAspectRatioChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     setAspectRatio(e.target.value);
   }, []);
-  
+
   // Handle resolution change
   const handleResolutionChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     setResolution(e.target.value);
   }, []);
-  
+
   // Toggle console visibility
   const toggleConsole = useCallback(() => {
     setShowConsole(prev => !prev);
@@ -227,13 +255,26 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
     }
   }, []);
 
+  // Apply VPN settings
+  const setVpn = useCallback((serverCode: string | null, clientCode: string | null) => {
+    console.log('setVpn', serverCode, clientCode);
+    setVpnServerCode(serverCode);
+    setVpnClientCode(clientCode);
+    const code = serverCode || clientCode;
+    if (code !== null) {
+      const vpnBuf = window.stringToNewUTF8(code);
+      window.emsocket_set_vpn(vpnBuf);
+      window._free(vpnBuf);
+    }
+  }, []);
+
   // Function to create argv for main
   const makeArgv = useCallback((args: string[]) => {
     if (!window._malloc || !window.HEAPU8 || !window.stringToNewUTF8) {
       minetestConsole.printErr("Error: Required Emscripten functions not available");
       return [0, 0];
     }
-    
+
     // Allocate memory for pointers (4 bytes per pointer)
     const argv = window._malloc((args.length + 1) * 4);
     let i;
@@ -247,23 +288,33 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
   // Launch the game with the current settings
   const launchGame = async () => {
     try {
-      // Initialize the storage manager with the selected storage policy
-      await storageManager!.initialize(
-        { policy: gameOptions.storagePolicy }, 
-        window.Module.FS
-      );
-      
+      if (!storageManager) {
+        throw new Error('StorageManager not initialized');
+      }
+      if (await storageManager.isInitialized) {
+        if (!storageManager.hasCopiedToModuleFS) {
+          await storageManager.copyToModuleFS();
+        }
+      }
+      else {
+        // Initialize the storage manager with the selected storage policy
+        await storageManager!.initialize(
+          { policy: gameOptions.storagePolicy },
+          true
+        );
+      }
+
       minetestConsole.print(`Storage initialized with policy: ${gameOptions.storagePolicy}`);
-      
+
       // Initialize other subsystems
       if (window.emloop_init_sound) window.emloop_init_sound();
       if (window.emsocket_init) window.emsocket_init();
-      
+
       // Set canvas size
       if (canvasRef.current) fixGeometry();
 
       minetestConsole.print("Installing required game packs...");
-      
+
       // Always install the base pack first
       await packManager.addPack('base', prefetchData.result.base!);
 
@@ -285,8 +336,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       };
 
       setMinetestConf(conf);
-      
-      // Set up arguments - don't use --go flag to start in menu mode
+
       const args = ['./minetest'];
       const [argc, argv] = makeArgv(args);
 
@@ -294,16 +344,16 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       if (window.emsocket_set_proxy) {
         setProxy(gameOptions.proxy);
       }
-      
+
       // Launch the game
       if (window.emloop_invoke_main) {
         minetestConsole.print("Starting Minetest...");
         window.emloop_invoke_main(argc, argv);
-        
+
         // Need to pause/unpause to let the browser redraw the DOM
         if (window.emloop_pause && window.emloop_unpause) {
           window.emloop_pause();
-          window.requestAnimationFrame(() => { 
+          window.requestAnimationFrame(() => {
             window.emloop_unpause();
             // Signal that the game is running
             onGameStatus('running');
@@ -324,7 +374,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
     // Define the emloop_ready function that will be called by the WASM module
     window.emloop_ready = () => {
       minetestConsole.print("emloop_ready called. Setting up functions...");
-      
+
       try {
         // Setup cwrapped functions - copied from original launcher.js
         window.emloop_pause = window.cwrap("emloop_pause", null, []);
@@ -352,8 +402,8 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
     // Define emloop_request_animation_frame function
     window.emloop_request_animation_frame = () => {
       if (window.emloop_pause) window.emloop_pause();
-      window.requestAnimationFrame(() => { 
-        if (window.emloop_unpause) window.emloop_unpause(); 
+      window.requestAnimationFrame(() => {
+        if (window.emloop_unpause) window.emloop_unpause();
       });
     };
 
@@ -367,10 +417,10 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
   // Initialize the WASM module
   useEffect(() => {
     if (!canvasRef.current) return;
-    
+
     const canvas = canvasRef.current;
     const modulePath = `minetest/minetest.js`;
-    
+
     // Set up Module configuration for Emscripten
     window.Module = {
       preRun: [],
@@ -439,7 +489,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
     `;
     window.Module['mainScriptUrlOrBlob'] = new Blob([workerInject], { type: "text/javascript" });
     window.Module['onFullScreen'] = () => { fixGeometry(); };
-    
+
     // Function to load the script
     const loadScript = () => {
       minetestConsole.print(`Loading WebAssembly module from ${modulePath}...`);
@@ -455,19 +505,19 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       };
       document.body.appendChild(script);
     };
-    
+
     // Load the module
     loadScript();
 
     // Set up resize handling
     const handleResize = () => fixGeometry();
     window.addEventListener('resize', handleResize);
-    
+
     return () => {
       window.removeEventListener('resize', handleResize);
     };
   }, [onGameStatus]);
-  
+
   // Update geometry when resolution or aspect ratio changes
   useEffect(() => {
     fixGeometry();
@@ -482,20 +532,20 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       settingsTimeoutRef.current = null;
     }
   }, []);
-  
+
   // Handle settings panel collapse with delay
   const collapseSettingsWithDelay = useCallback(() => {
     // Set a timeout to collapse after 1 second
     if (settingsTimeoutRef.current !== null) {
       window.clearTimeout(settingsTimeoutRef.current);
     }
-    
+
     settingsTimeoutRef.current = window.setTimeout(() => {
       setSettingsExpanded(false);
       settingsTimeoutRef.current = null;
     }, 300);
   }, []);
-  
+
   // Clean up timeout on unmount
   useEffect(() => {
     return () => {
@@ -508,7 +558,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
   return (
     <div className="h-[100vh] w-[100vw] flex flex-col bg-black relative overflow-hidden">
       {/* Floating settings panel */}
-      <div 
+      <div
         className={`absolute top-2 right-2 z-10 transition-all duration-300 ${
           settingsExpanded ? 'opacity-100' : 'opacity-90 hover:opacity-100'
         }`}
@@ -517,7 +567,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       >
         {/* Collapsed state - just the cogwheel */}
         {!settingsExpanded && (
-          <button 
+          <button
             onClick={expandSettings}
             className="bg-gray-800 hover:bg-gray-700 text-white rounded-full p-2 shadow-lg"
             style={{
@@ -530,19 +580,19 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
             </svg>
           </button>
         )}
-        
+
         {/* Expanded state - full settings panel */}
         {settingsExpanded && (
           <div className="bg-gray-800 rounded-lg shadow-lg p-3 max-w-md animate-fadeIn">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-white font-semibold">Settings</h3>
             </div>
-            
+
             <div className="grid grid-cols-2 gap-2 mb-2">
               <div>
                 <label htmlFor="resolution" className="text-gray-300 text-sm block mb-1">Resolution</label>
-                <select 
-                  id="resolution" 
+                <select
+                  id="resolution"
                   className="bg-gray-700 text-white rounded p-1 w-full"
                   value={resolution}
                   onChange={handleResolutionChange}
@@ -552,11 +602,11 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
                   <option value="low">Low Res</option>
                 </select>
               </div>
-              
+
               <div>
                 <label htmlFor="aspectRatio" className="text-gray-300 text-sm block mb-1">Aspect Ratio</label>
-                <select 
-                  id="aspectRatio" 
+                <select
+                  id="aspectRatio"
                   className="bg-gray-700 text-white rounded p-1 w-full"
                   value={aspectRatio}
                   onChange={handleAspectRatioChange}
@@ -571,15 +621,15 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
                 </select>
               </div>
             </div>
-            
+
             <div className="flex items-center justify-between">
-              <button 
+              <button
                 className="bg-blue-600 hover:bg-blue-700 text-white rounded p-1 px-3 text-sm"
                 onClick={toggleConsole}
               >
                 {showConsole ? 'Hide Console' : 'Show Console'}
               </button>
-              
+
               {gameOptions.storagePolicy === 'indexeddb' && (
                 <div className="flex items-center">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-400 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -599,11 +649,11 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
                         }
                         return 0;
                       };
-                      
+
                       const worldsMB = extractMB(stats.worlds);
                       const modsMB = extractMB(stats.mods);
                       const totalMB = worldsMB + modsMB;
-                      
+
                       if (totalMB < 1) {
                         return `${Math.round(totalMB * 1024)} KB`;
                       } else {
@@ -614,7 +664,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
                 </div>
               )}
             </div>
-            
+
             {isLoading && (
               <div className="mt-2 flex items-center gap-2">
                 <div className="h-2 w-full bg-gray-700 rounded-full overflow-hidden">
@@ -626,27 +676,27 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
           </div>
         )}
       </div>
-      
+
       {/* Canvas container */}
-      <div 
+      <div
         ref={canvasContainerRef}
         className="flex-1 flex items-center justify-center bg-black"
       >
-        <canvas 
+        <canvas
           ref={canvasRef}
-          id="canvas" 
+          id="canvas"
           className="emscripten m-0 p-0"
           onContextMenu={(e) => e.preventDefault()}
           tabIndex={-1}
         ></canvas>
       </div>
-      
+
       {/* Floating Console */}
       {showConsole && (
         <div className="absolute bottom-4 left-4 right-4 h-[30vh] z-10 bg-gray-900/85 backdrop-blur-sm border border-gray-700 rounded-lg shadow-xl overflow-hidden">
           <div className="flex items-center justify-between bg-gray-800/90 px-3 py-1.5">
             <h3 className="text-white text-sm font-medium">Console Output</h3>
-            <button 
+            <button
               onClick={toggleConsole}
               className="text-gray-400 hover:text-white"
             >
@@ -655,15 +705,15 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
               </svg>
             </button>
           </div>
-          <textarea 
-            id="console_output" 
+          <textarea
+            id="console_output"
             className="w-full h-[calc(100%-32px)] bg-transparent text-green-400 font-mono p-3 resize-none focus:outline-none"
             readOnly
             value={minetestConsole.messages.join('\n')}
           ></textarea>
         </div>
       )}
-      
+
       <SnackBar />
     </div>
   );

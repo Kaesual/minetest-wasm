@@ -222,6 +222,18 @@ export class IDBManagerDexie {
     }
   }
 
+  async getDirectSubDirectories(dirPath: string): Promise<string[]> {
+    try {
+      const db = await this.ensureDbInitialized();
+      const dirRegex = new RegExp(`^${dirPath}/[^/]+$`);
+      const directories = await db.directories.where('path').startsWith(dirPath).filter(dir => dirRegex.test(dir.path)).toArray();
+      return directories.map(dir => dir.path.split('/').pop() || '');
+    } catch (error) {
+      console.error('IDBManagerDexie: Error getting subdirectories:', dirPath, error);
+      throw new Error('Error getting subdirectories: ' + error);
+    }
+  }
+
   async storeDirectory(dirPath: string): Promise<void> {
     try {
       const db = await this.ensureDbInitialized();
