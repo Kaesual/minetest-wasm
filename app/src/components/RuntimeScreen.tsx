@@ -733,14 +733,21 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
               )}
             </div>
 
-            {(gameOptions.mode === 'host' || gameOptions.mode === 'join') && <div>
-              Join Code: {vpnClientCode}<br/>
-              Proxy: {PROXIES.find(p => p[0] === gameOptions.proxy)?.[1]}
-              {gameOptions.mode === 'join' && <>
-                <br/>Server Address: 172.16.0.1
-                <br/>Server Port: 30000
+            <ul className="text-sm list-disc ml-4">
+              <li>You can see and change the keys in the menu by pressing ESC</li>
+              {gameOptions.mode === 'host' || gameOptions.mode === 'join' && <>
+                <li>The join code is: {vpnClientCode}</li>
+                <li>The proxy is: {PROXIES.find(p => p[0] === gameOptions.proxy)?.[1]}</li>
               </>}
-            </div>}
+              {gameOptions.mode === 'join' && <>
+                <li>The host server address is: 172.16.0.1</li>
+                <li>The host server port is: 30000</li>
+              </>}
+              {gameOptions.mode === 'host' || gameOptions.mode === 'local' && <>
+                <li>To save your game, always press ESC and go back to the main menu</li>
+                <li>There, wait a few seconds before closing the game, otherwise your game might be lost or corrupted</li>
+              </>}
+            </ul>
 
             {isLoading && (
               <div className="mt-2 flex items-center gap-2">
@@ -757,12 +764,13 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       {/* Canvas container */}
       <div
         ref={canvasContainerRef}
-        className="flex-1 flex items-center justify-center bg-black"
+        className="m-0 p-0"
+        style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}
       >
         <canvas
           ref={canvasRef}
           id="canvas"
-          className="emscripten m-0 p-0"
+          className="emscripten"
           onContextMenu={(e) => e.preventDefault()}
           tabIndex={-1}
         ></canvas>

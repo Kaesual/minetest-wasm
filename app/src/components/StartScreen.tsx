@@ -315,7 +315,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
                 onClick={() => handleGameModeChange('local')}
                 className={`flex-1 p-3 rounded-lg transition ${gameMode === 'local' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-black hover:bg-gray-300'}`}
               >
-                Local only
+                Normal
               </button>
               <button 
                 onClick={() => handleGameModeChange('host')}
@@ -333,9 +333,20 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
           </div>
           
           {/* Form fields for the selected game mode */}
+          {gameMode === 'local' && (
+            <div className="mb-5 p-4 border border-gray-300 rounded-lg">
+              <h3 className="text-xl mb-3">Normal Game Mode</h3>
+              This will run the game in normal mode, and allow you to play alone or with others on public servers.
+              <ul className="text-sm list-disc ml-4">
+                <li>You can join public servers and play with other people on them</li>
+                <li>If you want to play with your friends directly, use "Host game" or "Join game" instead</li>
+              </ul>
+            </div>
+          )}
+
           {gameMode === 'host' && (
             <div className="mb-5 p-4 border border-gray-300 rounded-lg">
-              <h3 className="text-xl mb-3">Host Game</h3>
+              <h3 className="text-xl mb-3">Host Game Mode</h3>
               
               <div className="mb-3">
                 This will run the game in hosting mode, and create a join code you can share with your friends.
@@ -357,7 +368,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
           
           {gameMode === 'join' && (
             <div className="mb-5 p-4 border border-gray-300 rounded-lg">
-              <h3 className="text-xl mb-3">Join Game</h3>
+              <h3 className="text-xl mb-3">Join Game Mode</h3>
               
               <div className="mb-3">
                 This will run the game in joining mode, and allow you to connect to a game hosted by your friend.
