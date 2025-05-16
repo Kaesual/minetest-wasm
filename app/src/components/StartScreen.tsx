@@ -174,34 +174,18 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
       <div id="start_screen_left" className="flex flex-col justify-start p-5 overflow-y-auto rounded-xl text-lg bg-black bg-opacity-70 shadow-lg my-5 h-[calc(100vh-100px)] max-h-[calc(100vh-100px)] thin_scrollbar">
         <div id="start_screen_left_caption" className="flex flex-row items-center gap-4 text-4xl font-bold mb-8">
           <img src={`assets/minetest_logo.svg`} alt="Minetest Logo" className="w-20 h-20" />
-          Minetest
+          Luanti
         </div>
         
         <p className="mb-4">
-          Welcome to the web version of Minetest, a free and open-source voxel game engine.
+          Welcome to the web version of Luanti (also known as Minetest), a free and open-source voxel game engine.
         </p>
 
         <p className="mb-4">
-          This is a full-featured port of Minetest to the web using WebAssembly, allowing you to play
+          This is a experimental port of Minetest to the web using WebAssembly, allowing you to play
           directly in your browser without installing anything. There are some important things to know,
           so please read to the end of this screen.
         </p>
-        
-        <h2 className="text-2xl font-bold mt-4 mb-2">Controls</h2>
-        <ul className="ml-6 mb-4 list-disc">
-          <li className="mb-2">WASD - Movement</li>
-          <li className="mb-2">Space - Jump</li>
-          <li className="mb-2">Shift - Sneak</li>
-          <li className="mb-2">I - Inventory</li>
-          <li className="mb-2">Mouse - Look around</li>
-          <li className="mb-2">1-8 - Hotbar slots</li>
-          <li className="mb-2">N/B - Switch through hotbar slots</li>
-          <li className="mb-2">C - Switch camera mode</li>
-          <li className="mb-2">V - Switch minimap mode</li>
-          <li className="mb-2">T/ESC - Toggle ingame console</li>
-          <li className="mb-2">+/- - Change view distance</li>
-          <li className="mb-2">ESC - Menu</li>
-        </ul>
 
         <p className="mt-4">
           When you stop playing, always leave the world by opening the menu with ESC and selecting "Main menu". Then, wait several seconds before closing the Minetest plugin, to make sure your world saves are stored in your browser.
@@ -218,8 +202,24 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
         <p className="mt-4 italic">
           Note: This Common Ground plugin is not affiliated with the Minetest project.
           It started as a showcase of community gaming by one of the Common Ground
-          founders, and then went beyond that.
+          founders, and then went a bit beyond that.
         </p>
+
+        <h2 className="text-2xl font-bold mt-4 mb-2">Controls</h2>
+        <ul className="ml-6 mb-4 list-disc">
+          <li className="mb-2">WASD - Movement</li>
+          <li className="mb-2">Space - Jump</li>
+          <li className="mb-2">Shift - Sneak</li>
+          <li className="mb-2">I - Inventory</li>
+          <li className="mb-2">Mouse - Look around</li>
+          <li className="mb-2">1-8 - Hotbar slots</li>
+          <li className="mb-2">N/B - Switch through hotbar slots</li>
+          <li className="mb-2">C - Switch camera mode</li>
+          <li className="mb-2">V - Switch minimap mode</li>
+          <li className="mb-2">T/ESC - Toggle ingame console</li>
+          <li className="mb-2">+/- - Change view distance</li>
+          <li className="mb-2">ESC - Menu</li>
+        </ul>
 
         <p className="mt-4 italic">
           <b>Updates</b>
@@ -233,7 +233,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
           <b>A Tribute to the creators</b>
           <ul className="simple-list-non-bulleted">
             <li>Thanks to the Minetest team for the great game engine!</li>
-            <li>Thanks to paradust7 for the WebAssembly port!</li>
+            <li>Thanks to paradust7 for the amazing WebAssembly port and the proxies!</li>
             <li>Thanks to the Creators of Voxelibre, a Minecraft-like game mode for Minetest!</li>
             <li>Thanks to TSamuel for providing the Minetest logo on Wikipedia!</li>
             <li>Thanks to everyone contributing to open source software!</li>

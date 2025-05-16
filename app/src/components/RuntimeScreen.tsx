@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useLayoutEffect, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useLayoutEffect, useCallback, useMemo } from 'react';
 import { MinetestConsole, useMinetestConsole, usePrefetchData, useStorageManager } from '../utils/GlobalContext';
 import SnackBar from './SnackBar';
 import { type GameOptions } from '../App';
@@ -623,6 +623,23 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
     };
   }, []);
 
+  const helpListItems = useMemo(() => {
+    const items: string[] = ["You can see and change the keys in the menu by pressing ESC"];
+    if (gameOptions.mode === 'host' || gameOptions.mode === 'join') {
+      items.push(`The join code is: ${vpnClientCode}`);
+      items.push(`The proxy is: ${PROXIES.find(p => p[0] === gameOptions.proxy)?.[1]}`);
+    }
+    if (gameOptions.mode === 'join') {
+      items.push(`The host server address is: 172.16.0.1`);
+      items.push(`The host server port is: 30000`);
+    }
+    if (gameOptions.mode === 'host' || gameOptions.mode === 'local') {
+      items.push(`To save your game, always press ESC and go back to the main menu`);
+      items.push(`There, wait a few seconds before closing the game, otherwise your game might be lost or corrupted`);
+    }
+    return items;
+  }, [gameOptions.mode, vpnClientCode]);
+
   return (
     <div className="h-[100vh] w-[100vw] flex flex-col bg-black relative overflow-hidden">
       {/* Floating settings panel */}
@@ -734,19 +751,9 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
             </div>
 
             <ul className="text-sm list-disc ml-4">
-              <li>You can see and change the keys in the menu by pressing ESC</li>
-              {gameOptions.mode === 'host' || gameOptions.mode === 'join' && <>
-                <li>The join code is: {vpnClientCode}</li>
-                <li>The proxy is: {PROXIES.find(p => p[0] === gameOptions.proxy)?.[1]}</li>
-              </>}
-              {gameOptions.mode === 'join' && <>
-                <li>The host server address is: 172.16.0.1</li>
-                <li>The host server port is: 30000</li>
-              </>}
-              {gameOptions.mode === 'host' || gameOptions.mode === 'local' && <>
-                <li>To save your game, always press ESC and go back to the main menu</li>
-                <li>There, wait a few seconds before closing the game, otherwise your game might be lost or corrupted</li>
-              </>}
+              {helpListItems.map((item, index) => (
+                <li key={index}>{item}</li>
+              ))}
             </ul>
 
             {isLoading && (
