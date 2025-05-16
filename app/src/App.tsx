@@ -11,11 +11,11 @@ export interface GameOptions {
   proxy: string;
   storagePolicy: string;
   minetestArgs: MinetestArgs;
-  mode?: 'local' | 'host' | 'join';
+  mode: 'local' | 'host' | 'join';
+  gameId: 'minetest_game' | 'mineclone2';
   playerName?: string;
   joinCode?: string;
-  selectedGame?: string;
-  newGameName?: string;
+  worldName?: string;
 }
 
 function App() {
@@ -24,7 +24,9 @@ function App() {
     language: 'en',
     proxy: 'wss://na1.dustlabs.io/mtproxy',
     storagePolicy: 'indexeddb',
-    minetestArgs: new MinetestArgs()
+    minetestArgs: new MinetestArgs(),
+    mode: 'local',
+    gameId: 'minetest_game'
   });
 
   const handleStartGame = useCallback((options: GameOptions) => {

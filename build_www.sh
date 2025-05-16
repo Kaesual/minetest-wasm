@@ -17,7 +17,7 @@ mkdir "$ASSETS_DST_DIR"
 pushd "$BUILD_DIR/minetest/src"
 EMSCRIPTEN_FILES="minetest.js minetest.wasm minetest.worker.js"
 for I in $EMSCRIPTEN_FILES; do
-  cp "$I" "$RELEASE_DIR"
+  cp -p "$I" "$RELEASE_DIR"
 done
 
 # Copy assets

@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState, useLayoutEffect, useCallback } from
 import { MinetestConsole, useMinetestConsole, usePrefetchData, useStorageManager } from '../utils/GlobalContext';
 import SnackBar from './SnackBar';
 import { type GameOptions } from '../App';
+import { PROXIES } from '../utils/common';
+
 
 interface RuntimeScreenProps {
   gameOptions: GameOptions;
@@ -35,7 +37,7 @@ declare global {
 }
 
 function queryProxy(cmd: string, proxy: string) {
-  return new Promise((resolve, reject) => {
+  return new Promise<[string, string, string]>((resolve, reject) => {
     let finished = false;
     const ws = new WebSocket(proxy);
     ws.addEventListener('open', (event) => {
@@ -62,7 +64,7 @@ function queryProxy(cmd: string, proxy: string) {
       }
       finished = true;
       ws.close();
-      resolve(event.data.split(' '));
+      resolve(event.data.split(' ') as [string, string, string]);
     });
   });
 }
@@ -243,6 +245,9 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
         minetestConsole.print(`Set config:\n${confTxt}`);
       }
     }
+    else {
+      minetestConsole.printErr("RuntimeScreen: setMinetestConf failed");
+    }
   }, []);
 
   // Apply proxy setting
@@ -251,7 +256,10 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       const proxyBuf = window.stringToNewUTF8(proxyUrl);
       window.emsocket_set_proxy(proxyBuf);
       window._free(proxyBuf);
-      minetestConsole.print(`Set proxy: ${proxyUrl}`);
+      minetestConsole.print(`RuntimeScreen: setProxy ${proxyUrl}`);
+    }
+    else {
+      minetestConsole.printErr("RuntimeScreen: setProxy failed");
     }
   }, []);
 
@@ -260,6 +268,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
     console.log('setVpn', serverCode, clientCode);
     setVpnServerCode(serverCode);
     setVpnClientCode(clientCode);
+    // Use serverCode when available, otherwise use clientCode
     const code = serverCode || clientCode;
     if (code !== null) {
       const vpnBuf = window.stringToNewUTF8(code);
@@ -286,10 +295,11 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
   }, []);
 
   // Launch the game with the current settings
-  const launchGame = async () => {
+  const launchGameRef = useRef<(() => Promise<void>) | null>(null);
+  launchGameRef.current = (async () => {
     try {
       if (!storageManager) {
-        throw new Error('StorageManager not initialized');
+        throw new Error('StorageManager does not exist');
       }
       if (await storageManager.isInitialized) {
         if (!storageManager.hasCopiedToModuleFS) {
@@ -303,28 +313,18 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
           true
         );
       }
-
       minetestConsole.print(`Storage initialized with policy: ${gameOptions.storagePolicy}`);
 
-      // Initialize other subsystems
-      if (window.emloop_init_sound) window.emloop_init_sound();
-      if (window.emsocket_init) window.emsocket_init();
+      // Always install the base and voxelibre packs
+      minetestConsole.print("Installing required game packs...");
+      await packManager.addPack('base', prefetchData.result.base!);
+      // await packManager.addPack('minetest_game', prefetchData.result.minetest_game!);
+      await packManager.addPack('voxelibre', prefetchData.result.voxelibre!);
 
       // Set canvas size
       if (canvasRef.current) fixGeometry();
 
-      minetestConsole.print("Installing required game packs...");
-
-      // Always install the base pack first
-      await packManager.addPack('base', prefetchData.result.base!);
-
-      // Install the minetest_game pack, very basic game, but it's a good test
-      // await packManager.addPack('minetest_game');
-
-      // Install the voxelibre pack
-      await packManager.addPack('voxelibre', prefetchData.result.voxelibre!);
-
-      // Set graphics/performance settings
+      // Create config
       const conf = {
         'viewing_range': '140',
         'max_block_send_distance': '10',
@@ -334,31 +334,99 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
         'no_mtg_notification': 'true',
         'language': gameOptions.language
       };
-
+      if (gameOptions.mode === 'host' || gameOptions.mode === 'join') {
+        conf['viewing_range'] = '90';
+        conf['max_block_send_distance'] = '5';
+        conf['max_block_generate_distance'] = '5';
+        conf['block_send_optimize_distance'] = '5';
+        conf['client_mapblock_limit'] = '5000';
+      }
       setMinetestConf(conf);
 
-      const args = ['./minetest'];
-      const [argc, argv] = makeArgv(args);
+      // Initialize sound
+      if (window.emloop_init_sound) window.emloop_init_sound();
 
-      // Set proxy
-      if (window.emsocket_set_proxy) {
-        setProxy(gameOptions.proxy);
+      // Initialize emsocket after setting proxy and VPN
+      if (window.emsocket_init) {
+        window.emsocket_init();
+        minetestConsole.print("emsocket initialized");
       }
+
+      // Set up network - do this before initializing emsocket
+      setProxy(gameOptions.proxy);
+      
+      // Handle game mode specific settings and VPN setup
+      // Do this before emsocket_init
+      if (gameOptions.mode === 'join') {
+        if (!gameOptions.joinCode) {
+          throw new Error('RuntimeScreen: Join code is required');
+        }
+        setVpn(null, gameOptions.joinCode);
+      }
+      else if (gameOptions.mode === 'host') {
+        const [cmd, serverCode, clientCode] = await queryProxy(`MAKEVPN ${gameOptions.gameId}`, gameOptions.proxy);
+        if (cmd != 'NEWVPN') {
+          throw new Error('Invalid response from proxy');
+        }
+        console.log('serverCode', serverCode);
+        console.log('clientCode', clientCode);
+        setVpn(serverCode, clientCode);
+      }
+
+      // Set up minetest args
+      const { minetestArgs } = gameOptions;
+      minetestArgs.clear();
+
+      // NOTE: With --go the server seems to load too slowly for the client to connect,
+      // at least for big games like voxelibre
+
+      // if (gameOptions.mode === 'join') {
+      //   minetestArgs.go = true;
+      //   minetestArgs.gameid = gameOptions.gameId;
+      //   minetestArgs.address = '172.16.0.1';
+      //   minetestArgs.port = 30000;
+      //   // playerName is guaranteed to exist here due to the check above
+      //   minetestArgs.name = gameOptions.playerName!;
+      // }
+      // else if (gameOptions.mode === 'host') {
+      //   minetestArgs.go = true;
+      //   minetestArgs.gameid = gameOptions.gameId;
+      //   minetestArgs.address = '127.0.0.1';
+      //   minetestArgs.port = 30000;
+      //   // playerName is guaranteed to exist here due to the check above
+      //   minetestArgs.name = gameOptions.playerName!;
+      //   minetestArgs.worldname = gameOptions.worldName!;
+      //   minetestArgs.extra.push('--withserver');
+      // }
+
+      if (minetestArgs.go && window.irrlicht_force_pointerlock) {
+        window.irrlicht_force_pointerlock();
+      }
+
+      console.log("GAME OPTIONS", gameOptions);
 
       // Launch the game
       if (window.emloop_invoke_main) {
-        minetestConsole.print("Starting Minetest...");
-        window.emloop_invoke_main(argc, argv);
+        const fullArgs = ['./minetest', ...minetestArgs.toArray()];
 
-        // Need to pause/unpause to let the browser redraw the DOM
-        if (window.emloop_pause && window.emloop_unpause) {
-          window.emloop_pause();
-          window.requestAnimationFrame(() => {
-            window.emloop_unpause();
-            // Signal that the game is running
-            onGameStatus('running');
-          });
-        }
+        // NOTE: While this approach does not work, pre-warming the game cache
+        // somehow could still be the right strategy to fix the issue with --go
+        
+        // const withServerIndex = fullArgs.indexOf('--withserver');
+        // if (withServerIndex > -1) {
+        //   const tempArgs = ['./minetest', '--gameid', 'minetest_game', '--warm'];
+        //   const [argc, argv] = makeArgv(tempArgs);
+        //   console.log("Pre-warming game cache...");
+        //   const invokeMainResult = window.emloop_invoke_main(argc, argv);
+        //   console.log("Pre-warming game cache result:", invokeMainResult);
+        // }
+
+        minetestConsole.print("Starting: " + fullArgs.join(' '));
+        const [argc, argv] = makeArgv(fullArgs);
+        window.emloop_invoke_main(argc, argv);
+        window.emloop_request_animation_frame?.();
+
+        onGameStatus('running');
       }
     } catch (error) {
       minetestConsole.printErr(`Error launching game: ${error}`);
@@ -367,7 +435,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
     } finally {
       setIsLoading(false);
     }
-  };
+  });
 
   // Setup the global functions needed by the WASM module
   useLayoutEffect(() => {
@@ -392,7 +460,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
 
         minetestConsole.print("Successfully wrapped Emscripten functions");
 
-        launchGame();
+        launchGameRef.current?.();
       } catch (err) {
         minetestConsole.printErr(`Error setting up game: ${err}`);
         setIsLoading(false);
@@ -664,6 +732,15 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
                 </div>
               )}
             </div>
+
+            {(gameOptions.mode === 'host' || gameOptions.mode === 'join') && <div>
+              Join Code: {vpnClientCode}<br/>
+              Proxy: {PROXIES.find(p => p[0] === gameOptions.proxy)?.[1]}
+              {gameOptions.mode === 'join' && <>
+                <br/>Server Address: 172.16.0.1
+                <br/>Server Port: 30000
+              </>}
+            </div>}
 
             {isLoading && (
               <div className="mt-2 flex items-center gap-2">

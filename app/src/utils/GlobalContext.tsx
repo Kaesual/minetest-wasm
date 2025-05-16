@@ -10,10 +10,12 @@ export interface MinetestConsole {
 export interface PrefetchStatus {
   result: {
     base: Uint8Array | null;
+    minetest_game: Uint8Array | null;
     voxelibre: Uint8Array | null;
   };
   status: {
     base: number | 'done' | 'error';
+    minetest_game: number | 'done' | 'error';
     voxelibre: number | 'done' | 'error';
   };
 }
@@ -27,10 +29,12 @@ interface GlobalContextType {
 const initialPrefetchStatus: PrefetchStatus = {
   result: {
     base: null,
+    minetest_game: null,
     voxelibre: null
   },
   status: {
     base: 0,
+    minetest_game: 0,
     voxelibre: 0
   }
 };
@@ -95,7 +99,7 @@ export const GlobalProvider: React.FC<{children: React.ReactNode}> = ({ children
     messages
   }), [consolePrint, consolePrintErr, messages]);
     
-  const prefetch = useCallback(async (name: 'base' | 'voxelibre') => {
+  const prefetch = useCallback(async (name: 'base' | 'minetest_game' | 'voxelibre') => {
     const packUrl = `minetest/packs/${name}.pack`;
     try {
       console.log(`Prefetching pack: ${packUrl}`);
@@ -176,6 +180,7 @@ export const GlobalProvider: React.FC<{children: React.ReactNode}> = ({ children
 
   useEffect(() => {
     prefetch('base');
+    prefetch('minetest_game');
     prefetch('voxelibre');
   }, []);
   

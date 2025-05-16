@@ -5,7 +5,8 @@ class MinetestArgs {
     password: string;
     gameid: string;
     address: string;
-    port: string;
+    port: number;
+    worldname: string;
     packs: string[];
     extra: string[];
 
@@ -16,7 +17,8 @@ class MinetestArgs {
         this.password = '';
         this.gameid = '';
         this.address = '';
-        this.port = '';
+        this.port = 0;
+        this.worldname = '';
         this.packs = [];
         this.extra = [];
     }
@@ -30,8 +32,22 @@ class MinetestArgs {
         if (this.gameid) args.push('--gameid', this.gameid);
         if (this.address) args.push('--address', this.address);
         if (this.port) args.push('--port', this.port.toString());
+        if (this.worldname) args.push('--worldname', this.worldname); // `"${this.worldname}"`
         args.push(...this.extra);
         return args;
+    }
+
+    clear() {
+        this.go = false;
+        this.server = false;
+        this.name = '';
+        this.password = '';
+        this.gameid = '';
+        this.address = '';
+        this.port = 0;
+        this.worldname = '';
+        this.packs = [];
+        this.extra = [];
     }
 
     toJSON() {
