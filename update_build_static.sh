@@ -26,3 +26,11 @@ fi
 popd
 
 ./build_www.sh
+
+# Check if build was successful
+if [ -f "www/index.html" ]; then
+  echo "Build successful (index.html exists)"
+else
+  echo "Build failed (index.html does not exist)"
+  exit 1
+fi

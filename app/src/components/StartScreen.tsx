@@ -12,7 +12,7 @@ interface StartScreenProps {
   currentOptions: GameOptions;
 }
 
-// Define form validation interface
+// Define form validation interfacesetJoinCode
 interface FormValidation {
   playerName: boolean;
   joinCode: boolean;
@@ -27,6 +27,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
   const [isPreloading, setIsPreloading] = useState(true);
   const [gameMode, setGameMode] = useState<GameMode>('local');
   const [joinCode, setJoinCode] = useState<string>('');
+  const [joinCodeError, setJoinCodeError] = useState<string>('');
   const prefetchData = usePrefetchData();
   const minetestConsole = useMinetestConsole();
 
@@ -154,6 +155,8 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
       setIsLoading(false);
     }
   };
+
+  const startGameDisabled = isLoading || isPreloading || (gameMode === 'join' && !!joinCodeError);
 
   return (
     <div 
@@ -335,13 +338,18 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
               <h3 className="text-xl mb-3">Host Game</h3>
               
               <div className="mb-3">
-                This will run the game in hosting mode. You can host a game from the main menu.
-                <ul className="text-sm">
-                  <li>Select host server and make it public.</li>
-                  <li>Hover the settings icon in the top right corner. Copy the join code and share it with your friends. </li>
-                  <li>Next to the join code, you see the proxy you're using. Make sure your friends use the same proxy!</li>
-                  <li>Start the game. Your friends can connect as soon as it has loaded.</li>
-                  <li>To make sure the world is saved, always leave the world by opening the menu with ESC and selecting "Main menu". Then, wait several seconds before closing the Minetest plugin, to make sure your world saves are stored in your browser.</li>
+                This will run the game in hosting mode, and create a join code you can share with your friends.
+                <ul className="text-sm list-disc ml-4">
+                  <li>Click "Start Game"</li>
+                  <li>Select or create a world</li>
+                  <li>Toggle the "host server" checkbox, leave the port at 30000</li>
+                  <li>Choose a name and password for your own player</li>
+                  <li>Hover the settings icon in the top right corner of the game</li>
+                  <li>Copy the join code and share it with your friends</li>
+                  <li>Also tell your friends the proxy you're using, or it won't work</li>
+                  <li>Now start the game. Your friends can connect as soon as the world is loaded and running</li>
+                  <li>To make sure your savegames are stored, always leave the world by opening the menu with ESC and selecting "Main menu", and then wait several seconds when back in the main menu before closing the Minetest plugin</li>
+                  <li>Only share the join code with your friends, since the server will run on your own computer</li>
                 </ul>
               </div>
             </div>
@@ -352,12 +360,16 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
               <h3 className="text-xl mb-3">Join Game</h3>
               
               <div className="mb-3">
-                This will run the game in joining mode. You can join a game from the main menu.
-                <ul className="text-sm">
-                  <li>Enter the join code you got from your friend.</li>
-                  <li>Use the same proxy setting as your friend!</li>
-                  <li>Once in the game, go to "Join Game". Enter 172.16.0.1 as the server address and 30000 as the port.</li>
-                  <li>This will also be shown in the settings menu. You can open it by hovering the settings icon in the top right corner.</li>
+                This will run the game in joining mode, and allow you to connect to a game hosted by your friend.
+                <ul className="text-sm list-disc ml-4">
+                  <li>Enter the join code you got from your friend</li>
+                  <li>Use the same proxy setting as your friend, or it won't work</li>
+                  <li>Click "Start Game"</li>
+                  <li>Once in the game, go to "Join Game". Enter 172.16.0.1 as the server address and leave 30000 as the port</li>
+                  <li>You can also see this server address in the settings menu, which you can open by hovering the settings icon in the top right corner</li>
+                  <li>If this is the first time joining your friend's world, you'll need to click "Register" and create a player name and password</li>
+                  <li>If you already have a player name and password in that world, enter them and click "Login"</li>
+                  <li>Tip: Use the same player name and password in all worlds, to make it easier to remember them. Don't use a password you use elsewhere</li>
                   <li>Click "Join Game" and enjoy!</li>
                 </ul>
               </div>
@@ -368,17 +380,26 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
                   type="text" 
                   className="w-full p-3 rounded-lg border-2 border-gray-300 bg-white text-black"
                   value={joinCode}
-                  onChange={(e) => setJoinCode(e.target.value)}
+                  onChange={(e) => {
+                    const code = e.target.value.trim();
+                    setJoinCode(code);
+                    if (!/^[A-F0-9]{12}$/.test(code)) {
+                      setJoinCodeError('Join code must be 12 digits (0-9, A-F)');
+                    } else {
+                      setJoinCodeError('');
+                    }
+                  }}
                 />
+                {joinCodeError && <p className="text-red-500 text-sm">{joinCodeError}</p>}
               </div>
             </div>
           )}
           
           <button 
             onClick={handleStartGame}
-            disabled={isLoading || isPreloading}
+            disabled={startGameDisabled}
             className={`w-full p-4 rounded-lg text-white font-bold shadow-md transition transform hover:translate-y-[-2px] ${
-              isLoading || isPreloading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+              startGameDisabled ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >
             {isLoading || isPreloading ? 'Loading...' : 'Start Game'}
