@@ -9,7 +9,8 @@ the social platform Common Ground ([app.cg](https://app.cg), [commonground.cg](h
 The server is hosted in the browser, with persistent save games in indexeddb.
 
 There's an inofficial [Luanti Community](https://app.cg/c/luanti) there, too, where development and 
-roadmap can be discussed, and the game can be played there, too.
+roadmap can be discussed, and the game can be played there, too. Also, I've switched the default minetest 
+game for VoxeLibre as the initially loaded game.
 
 This build does not use the latest version of Luanti, and not much has been updated in the web assembly 
 build pipeline. Anyone who is interested in working on this together is very welcome.
