@@ -3,6 +3,30 @@ Minetest-wasm
 
 This is an experimental port of Minetest to the web using emscripten/WebAssembly.
 
+The original repository is from paradust7. This fork has done some work on save game persistence through 
+indexeddb storage, and has been created as a proof of concept for embedding a minecraft-like game into 
+the social platform Common Ground ([app.cg](https://app.cg), [commonground.cg](https://commonground.cg)) as an in-community plugin, to enable full p2p gameplay. 
+The server is hosted in the browser, with persistent save games in indexeddb.
+
+There's an inofficial [Luanti Community](https://app.cg/c/luanti) there, too, where development and 
+roadmap can be discussed, and the game can be played there, too.
+
+This build does not use the latest version of Luanti, and not much has been updated in the web assembly 
+build pipeline. Anyone who is interested in working on this together is very welcome.
+
+Disclosure: I'm also one of the founders of the Common Ground project, which is [on github](https://github.com/Common-Ground-DAO) too.
+
+No specific Ubuntu version is required for building anymore (as stated in the original README). I've 
+added a `build_all_with_docker.sh` script that uses a docker container for building and does not 
+have any other specific system requirements (only tested on Linux though 🐧❤️).
+
+I've also added some patches to hook into the saving to disk process, to trigger a synchronization with 
+indexeddb right after the save. For my specific use case, local directory sync is not an option since 
+it's unavailable in iframes, but it's possible and would probably be the best option for a long-term 
+stable Luanti web version.
+
+=============
+Original README
 
 System Requirements
 -------------------
