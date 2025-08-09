@@ -3,12 +3,25 @@ import Dexie from 'dexie';
 interface FileRecord {
   path: string;
   content: Uint8Array;
-  mtime: number;
-  atime: number;
+  stats: FileStats;
 }
 
 interface DirectoryRecord {
   path: string;
+}
+
+export interface FileStats {
+  mtime: number;
+  atime: number;
+  ctime: number;
+  size: number;
+  ino: number;
+  mode: number;
+  uid: number;
+  gid: number;
+  nlink: number;
+  dev: number;
+  rdev: number;
 }
 
 class MinetestDatabase extends Dexie {
@@ -18,8 +31,8 @@ class MinetestDatabase extends Dexie {
   constructor(dbName: string) {
     super(dbName);
     
-    this.version(2).stores({
-      files: 'path, mtime',
+    this.version(3).stores({
+      files: 'path, stats.mtime',
       directories: 'path'
     });
     
@@ -88,7 +101,7 @@ export class IDBManagerDexie {
     return this.db;
   }
 
-  async saveFile(path: string, content: Uint8Array | ArrayBuffer | string, mtime?: Date | number, atime?: Date | number): Promise<void> {
+  async saveFile(path: string, content: Uint8Array | ArrayBuffer | string, stats: FileStats): Promise<void> {
     try {
       const db = await this.ensureDbInitialized();
       
@@ -119,48 +132,23 @@ export class IDBManagerDexie {
         safeContent = new Uint8Array(0);
       }
       
-      // Process mtime and atime
-      const mtimeValue = this.processTimeValue(mtime);
-      const atimeValue = this.processTimeValue(atime);
-      
       // Create the file record
       const fileRecord: FileRecord = {
         path,
         content: safeContent,
-        mtime: mtimeValue,
-        atime: atimeValue
+        stats,
       };
       
       // Save to DB (this will overwrite if the path already exists)
       await db.files.put(fileRecord);
-      console.log("File saved:", path, "size:", safeContent.length);
       
-      return Promise.resolve();
     } catch (error) {
       console.error('IDBManagerDexie: Error saving file:', path, error);
-      return Promise.reject('Error saving file: ' + error);
+      throw new Error('Error saving file: ' + error);
     }
   }
 
-  private processTimeValue(timeValue?: Date | number): number {
-    if (!timeValue) {
-      return Date.now();
-    }
-    
-    if (timeValue instanceof Date) {
-      return timeValue.getTime();
-    }
-    
-    // Handle Unix timestamps in seconds (convert to milliseconds)
-    if (typeof timeValue === 'number' && timeValue < 100000000000) {
-      return timeValue * 1000;
-    }
-    
-    // Already milliseconds
-    return timeValue as number;
-  }
-
-  async loadFile(path: string): Promise<{ content: Uint8Array, mtime: Date, atime: Date } | null> {
+  async loadFile(path: string): Promise<{ content: Uint8Array, stats: FileStats } | null> {
     try {
       const db = await this.ensureDbInitialized();
       
@@ -169,8 +157,7 @@ export class IDBManagerDexie {
       if (record) {
         return {
           content: record.content,
-          mtime: new Date(record.mtime),
-          atime: new Date(record.atime)
+          stats: record.stats
         };
       } else {
         return null;
@@ -181,7 +168,7 @@ export class IDBManagerDexie {
     }
   }
 
-  async getAllFiles(basePath: string | null = null): Promise<{ path: string; content: Uint8Array; mtime: Date; atime: Date }[]> {
+  async getAllFiles(basePath: string | null = null): Promise<{ path: string; content: Uint8Array; stats: FileStats }[]> {
     try {
       const db = await this.ensureDbInitialized();
       
@@ -201,8 +188,7 @@ export class IDBManagerDexie {
       return files.map(file => ({
         path: file.path,
         content: file.content,
-        mtime: new Date(file.mtime),
-        atime: new Date(file.atime)
+        stats: file.stats
       }));
     } catch (error) {
       console.error('IDBManagerDexie: Error getting all files:', error);

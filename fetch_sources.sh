@@ -30,7 +30,7 @@ getrepo zstd "https://github.com/facebook/zstd.git" e47e674cd09583ff0503f0f6defd
 getrepo minetest_game "https://github.com/minetest/minetest_game.git" a3b171e317ec63428975915b821eb438c313adef
 
 # VoxeLibre Game
-getrepo voxelibre "https://github.com/VoxeLibre/VoxeLibre.git" 71018981ddcab1290dbdafa087d1f8b213c24163
+getrepo voxelibre "https://git.minetest.land/VoxeLibre/VoxeLibre.git" 0cf15c6e2366ebb0766fcfa0a91285c6b7f6b1ed
 
 # These repos are part of the fork
 getrepo webshims "https://github.com/paradust7/webshims.git" 91c3fe85d2cb7f85cc8e19d3f53dc8f252a69ff7

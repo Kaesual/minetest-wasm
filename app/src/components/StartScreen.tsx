@@ -157,6 +157,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
   };
 
   const startGameDisabled = isLoading || isPreloading || (gameMode === 'join' && !!joinCodeError);
+  const isStandalone = window.location.href.includes('standalone');
 
   return (
     <div 
@@ -199,11 +200,17 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
           Play responsibly and enjoy building in this blocky world!
         </p>
 
-        <p className="mt-4 italic">
+        {!isStandalone && <p className="mt-4 italic">
           Note: This Common Ground plugin is not affiliated with the Minetest project.
           It started as a showcase of community gaming by one of the Common Ground
           founders, and then went a bit beyond that.
-        </p>
+        </p>}
+        {isStandalone && <p className="mt-4 italic">
+          Note: This Luanti game client has been created by the Common Ground team. If 
+          you enjoy the game and want to get in touch, join the 
+          (inofficial) <a href="https://app.cg/c/luanti" target="_blank" style={{textDecoration: 'underline', fontWeight: 'bold'}}>Luanti Community on app.cg</a>. You can 
+          play the game there, too, and also chat, play and stream with other people.
+        </p>}
 
         <h2 className="text-2xl font-bold mt-4 mb-2">Controls</h2>
         <ul className="ml-6 mb-4 list-disc">

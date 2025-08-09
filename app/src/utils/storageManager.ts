@@ -1,4 +1,5 @@
-import { IDBManagerDexie } from './IDBManagerDexie';
+import { FileStats, IDBManagerDexie } from './IDBManagerDexie';
+import { type MinetestConsole } from './GlobalContext';
 
 interface StorageStats {
   fileCount: number;
@@ -23,12 +24,20 @@ export class StorageManager {
     totalSize: 0,
     lastUpdate: null
   };
+
+  private minetestConsole!: MinetestConsole;
+  private activeWorld: string | null = null;
+  private trackedWorlds: string[] = [];
+  private worldSyncTimeout: any = undefined;
+  private worldNamesToSync: Set<string> = new Set();
+  private fileStats: Map<string, FileStats> = new Map();
   
+  private readonly SYNC_DEBOUNCE_DELAY = 10_000;
   private readonly WORLDS_SYNC_BASE_PATH = '/minetest/worlds';
   private readonly MODS_SYNC_BASE_PATH = '/minetest/mods';
   
   constructor() {
-    // Empty constructor - initialization happens with initialize()
+    // Empty constructor - initialization happens with initialize() 
   }
   
   // Return the current storage policy
@@ -37,10 +46,11 @@ export class StorageManager {
   }
   
   // Initialize storage manager
-  async initialize(storageOptions: { policy: string }, copyToModuleFS: boolean = false): Promise<void> {
+  async initialize(storageOptions: { policy: string }, minetestConsole: MinetestConsole, copyToModuleFS: boolean = false): Promise<void> {
     this._isInitialized = new Promise<boolean>(async (resolve, reject) => {
+      this.minetestConsole = minetestConsole;
       if (this.storagePolicy === storageOptions.policy) {
-        console.log('StorageManager: Already initialized with identical policy');
+        this.minetestConsole.print('StorageManager: Already initialized with identical policy');
         resolve(true);
         return;
       }
@@ -56,7 +66,7 @@ export class StorageManager {
       }
   
       this.storagePolicy = storageOptions.policy;
-      console.log(`StorageManager: Initializing with policy - ${storageOptions.policy}`);
+      this.minetestConsole.print(`StorageManager: Initializing with policy - ${storageOptions.policy}`);
   
       if (storageOptions.policy === 'indexeddb') {
         try {
@@ -64,14 +74,15 @@ export class StorageManager {
             const idbManagerInstance = new IDBManagerDexie();
             await idbManagerInstance.initDB();
             this.idbManager = idbManagerInstance;
-            console.log('StorageManager: IndexedDB initialized for persistence.');
+            this.minetestConsole.print('StorageManager: IndexedDB initialized for persistence.');
           }
           if (copyToModuleFS) {
             await this.copyToModuleFS();
           }
-          await this.updateStorageStats(this.idbManager);
+          await this.updateStorageStats();
         } catch (e) {
           console.error('StorageManager: Failed to initialize IndexedDB backend.', e);
+          this.minetestConsole.printErr('StorageManager: Failed to initialize IndexedDB backend.');
           this.storagePolicy = 'no-storage';
           reject(e);
           return;
@@ -116,7 +127,7 @@ export class StorageManager {
               
             window.Module.FS.writeFile(file.path, content);
           } else {
-            console.warn(`StorageManager-IDB: Empty content for file ${file.path}, skipping`);
+            console.log(`StorageManager-IDB: Empty content for file ${file.path}, skipping`);
           }
         } catch (e) {
           console.error('StorageManager-IDB: Error writing file to WasmFS:', file.path, e);
@@ -130,15 +141,19 @@ export class StorageManager {
   }
 
   // Update storage statistics
-  private async updateStorageStats(idbManager: IDBManagerDexie): Promise<void> {
+  private updateStorageStats(): void {
     try {
       // Get all worlds files from IndexedDB
-      const worldFiles = await idbManager.getAllFiles(this.WORLDS_SYNC_BASE_PATH); 
+      const worldFiles = Array.from(this.fileStats.entries());
       let worldsSize = 0;
       
       // Calculate total size of world files
       for (const file of worldFiles) {
-        worldsSize += file.content ? file.content.byteLength : 0;
+        const isDirectory = (file[1].mode & 0x4000) === 0x4000;
+        if (isDirectory) {
+          continue;
+        }
+        worldsSize += file[1].size;
       }
       
       this.worldsStats = {
@@ -147,23 +162,103 @@ export class StorageManager {
         lastUpdate: new Date()
       };
       
-      // Get all mods files from IndexedDB
-      const modFiles = await idbManager.getAllFiles(this.MODS_SYNC_BASE_PATH);
-      let modsSize = 0;
+      // // Get all mods files from IndexedDB
+      // const modFiles = await idbManager.getAllFiles(this.MODS_SYNC_BASE_PATH);
+      // let modsSize = 0;
       
-      // Calculate total size of mod files
-      for (const file of modFiles) {
-        modsSize += file.content ? file.content.byteLength : 0;
-      }
+      // // Calculate total size of mod files
+      // for (const file of modFiles) {
+      //   modsSize += file.content ? file.content.byteLength : 0;
+      // }
       
-      this.modsStats = {
-        fileCount: modFiles.length,
-        totalSize: modsSize,
-        lastUpdate: new Date()
-      };
+      // this.modsStats = {
+      //   fileCount: modFiles.length,
+      //   totalSize: modsSize,
+      //   lastUpdate: new Date()
+      // };
     } catch (e) {
       console.error('StorageManager: Error calculating IndexedDB stats:', e);
     }
+  }
+
+  private alwaysSync: string[] = [
+    '/minetest/minetest.conf',
+  ];
+
+  private scheduleWorldSync(worldName: string): void {
+    this.worldNamesToSync.add(worldName);
+    if (this.worldSyncTimeout !== undefined) {
+      return;
+    }
+    this.worldSyncTimeout = setTimeout(async () => {
+      let changed = false;
+      const recursiveSync = async (path: string) => {
+        const filesAndDirectories = window.Module.FS.readdir(path);
+        for (const name of filesAndDirectories) {
+          if (name === "." || name === "..") {
+            continue;
+          }
+          const filePath = path + '/' + name;
+          const oldStats = this.fileStats.get(filePath);
+          const newStats = window.Module.FS.stat(filePath);
+          this.fileStats.set(filePath, newStats);
+          let isDirectory = (newStats.mode & 0x4000) === 0x4000;
+          if (isDirectory) {
+            await this.ensureDirectoryExists(filePath);
+            await recursiveSync(filePath);
+          } else {
+            if (oldStats === undefined || newStats.mtime > oldStats.mtime) {
+              changed = true;
+              this.fileStats.set(filePath, newStats);
+              await this.persistFile(filePath, window.Module.FS.readFile(filePath, { encoding: 'binary' }), newStats);
+              this.minetestConsole?.print(`StorageManager: Updated file: ${filePath}`);
+            }
+          }
+        }
+      }
+      // Sync each world
+      while (this.worldNamesToSync.size > 0) {
+        changed = false;
+        const worldsToSync = Array.from(this.worldNamesToSync);
+        this.worldNamesToSync.clear();
+        for (const worldName of worldsToSync) {
+          try {
+            await this.ensureDirectoryExists(this.WORLDS_SYNC_BASE_PATH + '/' + worldName);
+            await recursiveSync(this.WORLDS_SYNC_BASE_PATH + '/' + worldName);
+          } catch (e) {
+            console.error(`StorageManager: Error syncing world ${worldName}:`, e);
+            this.minetestConsole?.printErr(`StorageManager: Error syncing world ${worldName}: ${e}`);
+          }
+        }
+        // In every sync loop, sync always sync files and ensure directories
+        for (const path of this.alwaysSync) {
+          try {
+            const newStats = window.Module.FS.stat(path);
+            const isDirectory = (newStats.mode & 0x4000) === 0x4000;
+            if (isDirectory) {
+              await this.ensureDirectoryExists(path);
+              await recursiveSync(path);
+            }
+            else {
+              const oldStats = this.fileStats.get(path);
+              if (oldStats === undefined || newStats.mtime > oldStats.mtime) {
+                changed = true;
+                this.fileStats.set(path, newStats);
+                await this.persistFile(path, window.Module.FS.readFile(path, { encoding: 'binary' }), newStats);
+                this.minetestConsole?.print(`StorageManager: Updated file: ${path}`);
+              }
+            }
+          } catch (e) {
+            console.error(`StorageManager: Error syncing always sync file ${path}:`, e);
+            this.minetestConsole?.printErr(`StorageManager: Error syncing always sync file ${path}: ${e}`);
+          }
+        }
+        if (changed) {
+          this.updateStorageStats();
+        }
+      }
+      this.worldSyncTimeout = undefined;
+    }, this.SYNC_DEBOUNCE_DELAY);
   }
 
   get isInitialized(): boolean | Promise<boolean> {
@@ -174,6 +269,54 @@ export class StorageManager {
     return this._hasCopiedToModuleFS;
   }
 
+  setMinetestConsole(minetestConsole: MinetestConsole): void {
+    this.minetestConsole = minetestConsole;
+  }
+
+  public fileChanged(filePath: string): void {
+    // Normalize the path
+    const path = filePath.replace(/\/[^\/]+\/\.\.\//g, '/');
+    if (path.startsWith('/minetest/worlds/')) {
+      const worldName = path.match(/^\/minetest\/worlds\/([^\/]+)\//)?.[1];
+      if (!worldName) {
+        console.error(`StorageManager: No world name found in path: ${path}`);
+        return;
+      }
+      let firstrun = false;
+      if (!this.trackedWorlds.includes(worldName)) {
+        this.trackedWorlds.push(worldName);
+        firstrun = true;
+      }
+      if (this.activeWorld !== worldName) {
+        this.activeWorld = worldName;
+        this.minetestConsole?.print(`StorageManager: Active world changed to ${worldName}`);
+      }
+      if (firstrun) {
+        const worlds = window.Module.FS.readdir(this.WORLDS_SYNC_BASE_PATH);
+        for (const world of worlds) {
+          if (world !== "." && world !== "..") {
+            const stats = window.Module.FS.stat(this.WORLDS_SYNC_BASE_PATH + '/' + world);
+            const isDirectory = (stats.mode & 0x4000) === 0x4000;
+            if (isDirectory) {
+              this.scheduleWorldSync(world);
+            }
+          }
+        }
+      }
+      else {
+        this.scheduleWorldSync(worldName);
+      }
+    }
+  }
+
+  public fileDeleted(filePath: string): void {
+    // Normalize the path
+    const path = filePath.replace(/\/[^\/]+\/\.\.\//g, '/');
+    if (path.startsWith('/minetest/worlds/')) {
+      this.deleteDirectory(path);
+    }
+  }
+
   async copyToModuleFS(): Promise<void> {
     if (!window.Module?.FS) {
       console.error('StorageManager: Module.FS is not available for initialization.');
@@ -181,7 +324,7 @@ export class StorageManager {
     }
 
     if (this._hasCopiedToModuleFS) {
-      console.warn('StorageManager: Module.FS has already been copied to WasmFS, skipping.');
+      console.log('StorageManager: Module.FS has already been copied to WasmFS, skipping.');
       return;
     }
 
@@ -273,14 +416,14 @@ export class StorageManager {
   }
 
   // Ensures a directory exists in IndexedDB
-  ensureDirectoryExists(dirPath: string): void {
+  async ensureDirectoryExists(dirPath: string): Promise<void> {
     if (!this.idbManager || this.storagePolicy !== 'indexeddb') {
       console.log("StorageManager: No IndexedDB manager or not using IndexedDB storage");
       return;
     }
     
     try {
-      this.idbManager.storeDirectory(dirPath);
+      await this.idbManager.storeDirectory(dirPath);
       console.log(`StorageManager: Ensured directory exists: ${dirPath}`);
     } catch (e) {
       console.error(`StorageManager: Error ensuring directory exists: ${dirPath}`, e);
@@ -288,25 +431,13 @@ export class StorageManager {
   }
 
   // Persists a file to IndexedDB
-  persistFile(filePath: string, content: Uint8Array): void {
+  async persistFile(filePath: string, content: Uint8Array, stats: FileStats): Promise<void> {
     if (!this.idbManager || this.storagePolicy !== 'indexeddb') {
       console.log("StorageManager: No IndexedDB manager or not using IndexedDB storage");
       return;
     }
     
-    try {
-      this.idbManager.saveFile(filePath, content);
-      console.log(`StorageManager: Persisted file: ${filePath}`);
-      
-      // Update stats if this is a world or mod file
-      if (filePath.startsWith(this.WORLDS_SYNC_BASE_PATH) || filePath.startsWith(this.MODS_SYNC_BASE_PATH)) {
-        setTimeout(() => {
-          if (this.idbManager) this.updateStorageStats(this.idbManager);
-        }, 1000);
-      }
-    } catch (e) {
-      console.error(`StorageManager: Error persisting file: ${filePath}`, e);
-    }
+    return await this.idbManager.saveFile(filePath, content, stats);
   }
 
   // Deletes a directory from IndexedDB
@@ -323,7 +454,7 @@ export class StorageManager {
       // Update stats if this is a world or mod directory
       if (dirPath.startsWith(this.WORLDS_SYNC_BASE_PATH) || dirPath.startsWith(this.MODS_SYNC_BASE_PATH)) {
         setTimeout(() => {
-          if (this.idbManager) this.updateStorageStats(this.idbManager);
+          this.updateStorageStats();
         }, 1000);
       }
     } catch (e) {

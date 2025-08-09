@@ -310,6 +310,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
         // Initialize the storage manager with the selected storage policy
         await storageManager!.initialize(
           { policy: gameOptions.storagePolicy },
+          minetestConsole,
           true
         );
       }
@@ -516,31 +517,13 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       // Add handlers for file operations to sync with IndexedDB
       onFileChange: (path: string) => {
         // Normalize the path
-        path = path.replace(/\/[^\/]+\/\.\.\//g, '/');
-        if (path.startsWith('/minetest/worlds/') && storageManager) {
-          minetestConsole.print(`File changed: ${path}`);
-          try {
-            const statResult = window.Module.FS.stat(path);
-            let isDirectory = (statResult.mode & 0x4000) === 0x4000;
-            if (isDirectory) {
-              storageManager.ensureDirectoryExists(path);
-            } else {
-              const content = window.Module.FS.readFile(path, { encoding: 'binary' });
-              storageManager.persistFile(path, content);
-            }
-          } catch (e) {
-            minetestConsole.printErr(`Error persisting file: ${path}, ${e}`);
-          }
-        }
-        else {
-          minetestConsole.print(`File changed (no sync): ${path}`);
+        if (storageManager) {
+          storageManager.fileChanged(path);
         }
       },
       onFileDelete: (path: string) => {
-        path = path.replace(/\/[^\/]+\/\.\.\//g, '/');
-        minetestConsole.print(`File deleted: ${path}`);
         if (storageManager) {
-          storageManager.deleteDirectory(path);
+          storageManager.fileDeleted(path);
         }
       }
     };
@@ -590,6 +573,12 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
   useEffect(() => {
     fixGeometry();
   }, [resolution, aspectRatio]);
+
+  useEffect(() => {
+    if (storageManager) {
+      storageManager.setMinetestConsole(minetestConsole);
+    }
+  }, [storageManager, minetestConsole]);
 
   // Handle settings panel expansion
   const expandSettings = useCallback(() => {
