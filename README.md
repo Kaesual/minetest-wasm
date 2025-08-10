@@ -24,10 +24,13 @@ List of meaningful changes:
 - The original repo only comes with minetest_game, which is a bit underwhelming. Since I wanted to showcase a cool game integration, I switched that for VoxeLibre which now comes pre-loaded as the default game. I just updated it to the most recent version, too (0.90.1 as of today).
 
 If you want to embed this Luanti Web build as an iframe, the outer page as well as the iframed page need to set the following headers:
+
 Both:
 - Cross-Origin-Embedder-Policy require-corp
+
 Outer page:
 - Cross-Origin-Opener-Policy same-origin
+
 Inner page (in iframe):
 - Cross-Origin-Opener-Policy cross-origin
 - Cross-Origin-Resource-Policy cross-origin (only on resource files)
