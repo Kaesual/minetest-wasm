@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import StartScreen from './components/StartScreen';
 import RuntimeScreen from './components/RuntimeScreen';
 import GlobalProvider from './utils/GlobalContext';
 import './App.css';
 import MinetestArgs from './utils/MinetestArgs';
+import { PROXIES } from './utils/common';
 
 // Define the game options interface
 export interface GameOptions {
@@ -18,11 +19,13 @@ export interface GameOptions {
   worldName?: string;
 }
 
+const initial_proxy = PROXIES[parseInt(localStorage.getItem('luanti_wasm_selected_proxy') || '0')];
+
 function App() {
   const [isGameStarted, setIsGameStarted] = useState(false);
   const [gameOptions, setGameOptions] = useState<GameOptions>({
     language: 'en',
-    proxy: 'wss://na1.dustlabs.io/mtproxy',
+    proxy: initial_proxy[0],
     storagePolicy: 'indexeddb',
     minetestArgs: new MinetestArgs(),
     mode: 'local',

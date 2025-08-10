@@ -200,6 +200,9 @@ export class StorageManager {
   }
 
   private async executeWorldSync() {
+    if (this.storagePolicy !== 'indexeddb') {
+      return;
+    }
     let changed = false;
     if (this.worldSyncTimeout !== undefined) {
       // Only clear the timeout here, it's reset to undefined at the end of the function
@@ -288,6 +291,9 @@ export class StorageManager {
   }
 
   public fileChanged(filePath: string): void {
+    if (this.storagePolicy !== 'indexeddb') {
+      return;
+    }
     // Normalize the path
     const path = filePath.replace(/\/[^\/]+\/\.\.\//g, '/');
     if (path.startsWith('/minetest/worlds/')) {
@@ -329,6 +335,9 @@ export class StorageManager {
   }
 
   public fileDeleted(filePath: string): void {
+    if (this.storagePolicy !== 'indexeddb') {
+      return;
+    }
     // Normalize the path
     const path = filePath.replace(/\/[^\/]+\/\.\.\//g, '/');
     if (path.startsWith('/minetest/worlds/')) {

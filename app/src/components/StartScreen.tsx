@@ -22,7 +22,7 @@ interface FormValidation {
 const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions, currentOptions }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState<string>(currentOptions.language);
-  const [selectedProxy, setSelectedProxy] = useState<number>(0);
+  const [selectedProxy, _setSelectedProxy] = useState<number>(parseInt(localStorage.getItem('luanti_wasm_selected_proxy') || '0'));
   const [selectedStorage, setSelectedStorage] = useState<string>(currentOptions.storagePolicy);
   const [isPreloading, setIsPreloading] = useState(true);
   const [gameMode, setGameMode] = useState<GameMode>('local');
@@ -30,6 +30,11 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
   const [joinCodeError, setJoinCodeError] = useState<string>('');
   const prefetchData = usePrefetchData();
   const minetestConsole = useMinetestConsole();
+
+  const setSelectedProxy = (index: number) => {
+    _setSelectedProxy(index);
+    localStorage.setItem('luanti_wasm_selected_proxy', index.toString());
+  };
 
   // Find the initial proxy index based on currentOptions
   useEffect(() => {
