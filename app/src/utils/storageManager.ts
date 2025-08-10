@@ -31,10 +31,11 @@ export class StorageManager {
   private worldSyncTimeout: any = undefined;
   private worldNamesToSync: Set<string> = new Set();
   private fileStats: Map<string, FileStats> = new Map();
+  private nextWorldSyncTime: number = 0;
   
   private readonly WORLDS_SYNC_BASE_PATH = '/minetest/worlds';
   private readonly MODS_SYNC_BASE_PATH = '/minetest/mods';
-  
+
   public autoSync: boolean = true;
   public autoSyncDebounceDelay: number = 10_000;
 
@@ -198,72 +199,80 @@ export class StorageManager {
     return changed;
   }
 
+  private async executeWorldSync() {
+    let changed = false;
+    if (this.worldSyncTimeout !== undefined) {
+      // Only clear the timeout here, it's reset to undefined at the end of the function
+      // This makes sure that executeWorldSync can be called directly without waiting for the debounce delay
+      clearTimeout(this.worldSyncTimeout);
+    }
+    // Sync each world
+    while (this.worldNamesToSync.size > 0) {
+      changed = false;
+      const worldsToSync = Array.from(this.worldNamesToSync);
+      this.worldNamesToSync.clear();
+      for (const worldName of worldsToSync) {
+        try {
+          try {
+            // Recursively sync the world. Will throw if the world has been deleted
+            changed = (await this.recursiveSync(this.WORLDS_SYNC_BASE_PATH + '/' + worldName)) || changed;
+            await this.ensureDirectoryExists(this.WORLDS_SYNC_BASE_PATH + '/' + worldName);
+          }
+          catch (e) {
+            if (e instanceof Error && e.message === "No such directory") {
+              // World was deleted, remove from tracked worlds
+              changed = true;
+              this.trackedWorlds = this.trackedWorlds.filter(world => world !== worldName);
+              this.minetestConsole?.print(`StorageManager: World ${worldName} deleted, removing from tracked worlds`);
+              // no need to await this
+              this.idbManager?.deleteDirectory(this.WORLDS_SYNC_BASE_PATH + '/' + worldName);
+            }
+            else {
+              throw e;
+            }
+          }
+        } catch (e) {
+          console.error(`StorageManager: Error syncing world ${worldName}:`, e);
+          this.minetestConsole?.printErr(`StorageManager: Error syncing world ${worldName}: ${e}`);
+        }
+      }
+      // In every sync loop, sync alwaysSync files and ensure directories
+      for (const path of this.alwaysSync) {
+        try {
+          const newStats = window.Module.FS.stat(path);
+          const isDirectory = (newStats.mode & 0x4000) === 0x4000;
+          if (isDirectory) {
+            changed = (await this.recursiveSync(path)) || changed;
+            await this.ensureDirectoryExists(path);
+          }
+          else {
+            const oldStats = this.fileStats.get(path);
+            if (oldStats === undefined || newStats.mtime > oldStats.mtime) {
+              changed = true;
+              this.fileStats.set(path, newStats);
+              this.minetestConsole?.print(`StorageManager: Updating file: ${path}`);
+              await this.persistFile(path, window.Module.FS.readFile(path, { encoding: 'binary' }), newStats);
+            }
+          }
+        } catch (e) {
+          console.error(`StorageManager: Error syncing always sync file ${path}:`, e);
+          this.minetestConsole?.printErr(`StorageManager: Error syncing always sync file ${path}: ${e}`);
+        }
+      }
+      if (changed) {
+        this.updateStorageStats();
+      }
+    }
+    this.worldSyncTimeout = undefined;
+  }
+
   private scheduleWorldSync(worldName: string): void {
     this.worldNamesToSync.add(worldName);
     if (this.worldSyncTimeout !== undefined || !this.autoSync) {
       return;
     }
-    this.worldSyncTimeout = setTimeout(async () => {
-      let changed = false;
-      // Sync each world
-      while (this.worldNamesToSync.size > 0) {
-        changed = false;
-        const worldsToSync = Array.from(this.worldNamesToSync);
-        this.worldNamesToSync.clear();
-        for (const worldName of worldsToSync) {
-          try {
-            try {
-              // Recursively sync the world. Will throw if the world has been deleted
-              changed = (await this.recursiveSync(this.WORLDS_SYNC_BASE_PATH + '/' + worldName)) || changed;
-              await this.ensureDirectoryExists(this.WORLDS_SYNC_BASE_PATH + '/' + worldName);
-            }
-            catch (e) {
-              if (e instanceof Error && e.message === "No such directory") {
-                // World was deleted, remove from tracked worlds
-                changed = true;
-                this.trackedWorlds = this.trackedWorlds.filter(world => world !== worldName);
-                this.minetestConsole?.print(`StorageManager: World ${worldName} deleted, removing from tracked worlds`);
-                // no need to await this
-                this.idbManager?.deleteDirectory(this.WORLDS_SYNC_BASE_PATH + '/' + worldName);
-              }
-              else {
-                throw e;
-              }
-            }
-          } catch (e) {
-            console.error(`StorageManager: Error syncing world ${worldName}:`, e);
-            this.minetestConsole?.printErr(`StorageManager: Error syncing world ${worldName}: ${e}`);
-          }
-        }
-        // In every sync loop, sync alwaysSync files and ensure directories
-        for (const path of this.alwaysSync) {
-          try {
-            const newStats = window.Module.FS.stat(path);
-            const isDirectory = (newStats.mode & 0x4000) === 0x4000;
-            if (isDirectory) {
-              changed = (await this.recursiveSync(path)) || changed;
-              await this.ensureDirectoryExists(path);
-            }
-            else {
-              const oldStats = this.fileStats.get(path);
-              if (oldStats === undefined || newStats.mtime > oldStats.mtime) {
-                changed = true;
-                this.fileStats.set(path, newStats);
-                this.minetestConsole?.print(`StorageManager: Updating file: ${path}`);
-                await this.persistFile(path, window.Module.FS.readFile(path, { encoding: 'binary' }), newStats);
-              }
-            }
-          } catch (e) {
-            console.error(`StorageManager: Error syncing always sync file ${path}:`, e);
-            this.minetestConsole?.printErr(`StorageManager: Error syncing always sync file ${path}: ${e}`);
-          }
-        }
-        if (changed) {
-          this.updateStorageStats();
-        }
-      }
-      this.worldSyncTimeout = undefined;
-    }, this.autoSyncDebounceDelay);
+
+    this.worldSyncTimeout = setTimeout(this.executeWorldSync.bind(this), this.autoSyncDebounceDelay);
   }
 
   get isInitialized(): boolean | Promise<boolean> {

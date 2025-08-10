@@ -3,30 +3,62 @@ Minetest-wasm
 
 This is an experimental port of Minetest to the web using emscripten/WebAssembly.
 
-The original repository is from paradust7. This fork has done some work on save game persistence through 
+The original repository was made by paradust7. This fork has done some work on save game persistence through 
 indexeddb storage, and has been created as a proof of concept for embedding a minecraft-like game into 
 the social platform Common Ground ([app.cg](https://app.cg), [commonground.cg](https://commonground.cg)) as an in-community plugin, to enable full p2p gameplay. 
 The server is hosted in the browser, with persistent save games in indexeddb.
 
 There's an inofficial [Luanti Community](https://app.cg/c/luanti) there, too, where development and 
 roadmap can be discussed, and the game can be played there, too. Also, I've switched the default minetest 
-game for VoxeLibre as the initially loaded game.
+game for VoxeLibre as the initially loaded game, to offer a more "Minecraft-like" out-of-the-box experience.
 
 This build does not use the latest version of Luanti, and not much has been updated in the web assembly 
 build pipeline. Anyone who is interested in working on this together is very welcome.
 
 Disclosure: I'm also one of the founders of the Common Ground project, which is [on github](https://github.com/Common-Ground-DAO) too.
 
-No specific Ubuntu version is required for building anymore (as stated in the original README). I've 
+List of meaningful changes:
+- Replaced the original html loader with a modern next.js based loader. This allows easy integration and customization of Luanti Web into existing websites.
+- In-browser storage backend for world save and config files. This allows save games to be stored persistently in the browser across reloads.
+- With this indexedDb storage backend, the Luanti web client can be embedded and run in iframes. This is convenient, as it allows better integration in existing web projects.
+- The original repo only comes with minetest_game, which is a bit underwhelming. Since I wanted to showcase a cool game integration, I switched that for VoxeLibre which now comes pre-loaded as the default game. I just updated it to the most recent version, too (0.90.1 as of today).
+
+If you want to embed this Luanti Web build as an iframe, the outer page as well as the iframed page need to set the following headers:
+Both:
+- Cross-Origin-Embedder-Policy require-corp
+Outer page:
+- Cross-Origin-Opener-Policy same-origin
+Inner page (in iframe):
+- Cross-Origin-Opener-Policy cross-origin
+- Cross-Origin-Resource-Policy cross-origin (only on resource files)
+
+Update 2025-08-10:
+- I've connected with paradust, the maintainer of the repository this one has been forked from
+- There's a [Discord community](https://discord.gg/APmB9j2M) for Luanti WASM now, for development related discussions, feedback, feature requests etc.
+- You're still invited to join the inofficial [Luanti community on app.cg](https://app.cg/c/luanti) if you want to get in touch
+- I will try to upstream my storage changes to the original repository
+- At the same time, I consider making an app.cg-specific branch that connects the Luanti client with CG's user and community model, to enable a customized, community-integrated gameplay experience
+
+No specific Ubuntu version is required for building (stated differently in the original README). I've 
 added a `build_all_with_docker.sh` script that uses a docker container for building and does not 
 have any other specific system requirements (only tested on Linux though 🐧❤️).
 
+    cd minetest-wasm
+    ./build_all_with_docker.sh
+
 I've also added some patches to hook into the saving to disk process, to trigger a synchronization with 
-indexeddb right after the save. For my specific use case, local directory sync is not an option since 
-it's unavailable in iframes, but it's possible and would probably be the best option for a long-term 
-stable Luanti web version.
+indexeddb right after the save. My specific use case (cross-origin iframes: Embed Luanti web anywhere) only 
+works with indexedDb, but I might look into FileSystemDirectoryHandle to enable a direct local sync directory.
+
+2025-08-10 Update Notes:
+- reworked the indexedDb sync mechanism, so it reliably synchronizes all world files and folders, with a configurable debounce interval
+- automatic world tracking: only synchronizes the currentl active world
+- added minetest.conf and client/mod_storage.sqlite to sync
+- updated VoxeLibre in the build pipeline to the most recent version (0.90.1)
+- This repository is MIT-licensed, like the original one
 
 =============
+
 Original README
 
 System Requirements
