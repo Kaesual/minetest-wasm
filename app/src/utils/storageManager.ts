@@ -32,10 +32,12 @@ export class StorageManager {
   private worldNamesToSync: Set<string> = new Set();
   private fileStats: Map<string, FileStats> = new Map();
   
-  private readonly SYNC_DEBOUNCE_DELAY = 10_000;
   private readonly WORLDS_SYNC_BASE_PATH = '/minetest/worlds';
   private readonly MODS_SYNC_BASE_PATH = '/minetest/mods';
   
+  public autoSync: boolean = true;
+  public autoSyncDebounceDelay: number = 10_000;
+
   constructor() {
     // Empty constructor - initialization happens with initialize() 
   }
@@ -159,21 +161,6 @@ export class StorageManager {
         totalSize: worldsSize,
         lastUpdate: new Date()
       };
-      
-      // // Get all mods files from IndexedDB
-      // const modFiles = await idbManager.getAllFiles(this.MODS_SYNC_BASE_PATH);
-      // let modsSize = 0;
-      
-      // // Calculate total size of mod files
-      // for (const file of modFiles) {
-      //   modsSize += file.content ? file.content.byteLength : 0;
-      // }
-      
-      // this.modsStats = {
-      //   fileCount: modFiles.length,
-      //   totalSize: modsSize,
-      //   lastUpdate: new Date()
-      // };
     } catch (e) {
       console.error('StorageManager: Error calculating IndexedDB stats:', e);
     }
@@ -184,38 +171,40 @@ export class StorageManager {
     '/minetest/client/mod_storage.sqlite',
   ];
 
+  private async recursiveSync(path: string, changed: boolean = false): Promise<boolean> {
+    let filesAndDirectories: string[] = [];
+    filesAndDirectories = window.Module.FS.readdir(path);
+    for (const name of filesAndDirectories) {
+      if (name === "." || name === "..") {
+        continue;
+      }
+      const filePath = path + '/' + name;
+      const oldStats = this.fileStats.get(filePath);
+      const newStats = window.Module.FS.stat(filePath);
+      this.fileStats.set(filePath, newStats);
+      let isDirectory = (newStats.mode & 0x4000) === 0x4000;
+      if (isDirectory) {
+        await this.ensureDirectoryExists(filePath);
+        changed = (await this.recursiveSync(filePath, changed)) || changed;
+      } else {
+        if (oldStats === undefined || newStats.mtime > oldStats.mtime) {
+          changed = true;
+          this.fileStats.set(filePath, newStats);
+          await this.persistFile(filePath, window.Module.FS.readFile(filePath, { encoding: 'binary' }), newStats);
+          this.minetestConsole?.print(`StorageManager: Updated file: ${filePath}`);
+        }
+      }
+    }
+    return changed;
+  }
+
   private scheduleWorldSync(worldName: string): void {
     this.worldNamesToSync.add(worldName);
-    if (this.worldSyncTimeout !== undefined) {
+    if (this.worldSyncTimeout !== undefined || !this.autoSync) {
       return;
     }
     this.worldSyncTimeout = setTimeout(async () => {
       let changed = false;
-      const recursiveSync = async (path: string) => {
-        let filesAndDirectories: string[] = [];
-        filesAndDirectories = window.Module.FS.readdir(path);
-        for (const name of filesAndDirectories) {
-          if (name === "." || name === "..") {
-            continue;
-          }
-          const filePath = path + '/' + name;
-          const oldStats = this.fileStats.get(filePath);
-          const newStats = window.Module.FS.stat(filePath);
-          this.fileStats.set(filePath, newStats);
-          let isDirectory = (newStats.mode & 0x4000) === 0x4000;
-          if (isDirectory) {
-            await this.ensureDirectoryExists(filePath);
-            await recursiveSync(filePath);
-          } else {
-            if (oldStats === undefined || newStats.mtime > oldStats.mtime) {
-              changed = true;
-              this.fileStats.set(filePath, newStats);
-              await this.persistFile(filePath, window.Module.FS.readFile(filePath, { encoding: 'binary' }), newStats);
-              this.minetestConsole?.print(`StorageManager: Updated file: ${filePath}`);
-            }
-          }
-        }
-      }
       // Sync each world
       while (this.worldNamesToSync.size > 0) {
         changed = false;
@@ -225,12 +214,13 @@ export class StorageManager {
           try {
             try {
               // Recursively sync the world. Will throw if the world has been deleted
-              await recursiveSync(this.WORLDS_SYNC_BASE_PATH + '/' + worldName);
+              changed = (await this.recursiveSync(this.WORLDS_SYNC_BASE_PATH + '/' + worldName)) || changed;
               await this.ensureDirectoryExists(this.WORLDS_SYNC_BASE_PATH + '/' + worldName);
             }
             catch (e) {
               if (e instanceof Error && e.message === "No such directory") {
                 // World was deleted, remove from tracked worlds
+                changed = true;
                 this.trackedWorlds = this.trackedWorlds.filter(world => world !== worldName);
                 this.minetestConsole?.print(`StorageManager: World ${worldName} deleted, removing from tracked worlds`);
                 // no need to await this
@@ -251,7 +241,7 @@ export class StorageManager {
             const newStats = window.Module.FS.stat(path);
             const isDirectory = (newStats.mode & 0x4000) === 0x4000;
             if (isDirectory) {
-              await recursiveSync(path);
+              changed = (await this.recursiveSync(path)) || changed;
               await this.ensureDirectoryExists(path);
             }
             else {
@@ -259,8 +249,8 @@ export class StorageManager {
               if (oldStats === undefined || newStats.mtime > oldStats.mtime) {
                 changed = true;
                 this.fileStats.set(path, newStats);
+                this.minetestConsole?.print(`StorageManager: Updating file: ${path}`);
                 await this.persistFile(path, window.Module.FS.readFile(path, { encoding: 'binary' }), newStats);
-                this.minetestConsole?.print(`StorageManager: Updated file: ${path}`);
               }
             }
           } catch (e) {
@@ -273,7 +263,7 @@ export class StorageManager {
         }
       }
       this.worldSyncTimeout = undefined;
-    }, this.SYNC_DEBOUNCE_DELAY);
+    }, this.autoSyncDebounceDelay);
   }
 
   get isInitialized(): boolean | Promise<boolean> {
@@ -294,7 +284,7 @@ export class StorageManager {
     if (path.startsWith('/minetest/worlds/')) {
       const worldName = path.match(/^\/minetest\/worlds\/([^\/]+)\//)?.[1];
       if (!worldName) {
-        console.error(`StorageManager: No world name found in path: ${path}`);
+        this.minetestConsole?.printErr(`StorageManager: No world name found in path: ${path}`);
         return;
       }
       let firstrun = false;
@@ -325,7 +315,6 @@ export class StorageManager {
       }
     }
     else {
-      console.log(`StorageManager: File changed (no sync): ${path}`);
       this.minetestConsole?.print(`StorageManager: File changed (no sync): ${path}`);
     }
   }
