@@ -94,19 +94,17 @@ export class StorageManager {
   }
 
   // Load files from IndexedDB to the filesystem
-  private async copyIdbPathToModuleFS(
-    basePath: string
-  ): Promise<void> {
+  private async copyIdbPathToModuleFS(): Promise<void> {
     if (!window.Module?.FS || !this.idbManager) {
       console.error('StorageManager-IDB: Module.FS or IDBManager not available for initial load.');
       return Promise.reject('FS or IDBManager not ready for IDB load');
     }
     
-    console.log('StorageManager-IDB: Starting initial load from IndexedDB for path: ' + basePath);
+    console.log('StorageManager-IDB: Starting initial load from IndexedDB');
     try {
-      const files = await this.idbManager.getAllFiles(basePath);
+      const files = await this.idbManager.getAllFiles();
       if (files.length === 0) {
-        console.log('StorageManager-IDB: No files found in IndexedDB under ' + basePath + ' to preload.');
+        console.log('StorageManager-IDB: No files found in IndexedDB.');
         return;
       }
       console.log(`StorageManager-IDB: Found ${files.length} file(s) to load into WasmFS.`);
@@ -133,7 +131,7 @@ export class StorageManager {
           console.error('StorageManager-IDB: Error writing file to WasmFS:', file.path, e);
         }
       }
-      console.log('StorageManager-IDB: Finished loading files from IndexedDB into WasmFS for ' + basePath);
+      console.log('StorageManager-IDB: Finished loading files from IndexedDB into WasmFS.');
     } catch (e) {
       console.error('StorageManager-IDB: Error during initial load from IndexedDB:', e);
       throw e; 
@@ -183,6 +181,7 @@ export class StorageManager {
 
   private alwaysSync: string[] = [
     '/minetest/minetest.conf',
+    '/minetest/client/mod_storage.sqlite',
   ];
 
   private scheduleWorldSync(worldName: string): void {
@@ -193,7 +192,8 @@ export class StorageManager {
     this.worldSyncTimeout = setTimeout(async () => {
       let changed = false;
       const recursiveSync = async (path: string) => {
-        const filesAndDirectories = window.Module.FS.readdir(path);
+        let filesAndDirectories: string[] = [];
+        filesAndDirectories = window.Module.FS.readdir(path);
         for (const name of filesAndDirectories) {
           if (name === "." || name === "..") {
             continue;
@@ -223,21 +223,36 @@ export class StorageManager {
         this.worldNamesToSync.clear();
         for (const worldName of worldsToSync) {
           try {
-            await this.ensureDirectoryExists(this.WORLDS_SYNC_BASE_PATH + '/' + worldName);
-            await recursiveSync(this.WORLDS_SYNC_BASE_PATH + '/' + worldName);
+            try {
+              // Recursively sync the world. Will throw if the world has been deleted
+              await recursiveSync(this.WORLDS_SYNC_BASE_PATH + '/' + worldName);
+              await this.ensureDirectoryExists(this.WORLDS_SYNC_BASE_PATH + '/' + worldName);
+            }
+            catch (e) {
+              if (e instanceof Error && e.message === "No such directory") {
+                // World was deleted, remove from tracked worlds
+                this.trackedWorlds = this.trackedWorlds.filter(world => world !== worldName);
+                this.minetestConsole?.print(`StorageManager: World ${worldName} deleted, removing from tracked worlds`);
+                // no need to await this
+                this.idbManager?.deleteDirectory(this.WORLDS_SYNC_BASE_PATH + '/' + worldName);
+              }
+              else {
+                throw e;
+              }
+            }
           } catch (e) {
             console.error(`StorageManager: Error syncing world ${worldName}:`, e);
             this.minetestConsole?.printErr(`StorageManager: Error syncing world ${worldName}: ${e}`);
           }
         }
-        // In every sync loop, sync always sync files and ensure directories
+        // In every sync loop, sync alwaysSync files and ensure directories
         for (const path of this.alwaysSync) {
           try {
             const newStats = window.Module.FS.stat(path);
             const isDirectory = (newStats.mode & 0x4000) === 0x4000;
             if (isDirectory) {
-              await this.ensureDirectoryExists(path);
               await recursiveSync(path);
+              await this.ensureDirectoryExists(path);
             }
             else {
               const oldStats = this.fileStats.get(path);
@@ -291,6 +306,7 @@ export class StorageManager {
         this.activeWorld = worldName;
         this.minetestConsole?.print(`StorageManager: Active world changed to ${worldName}`);
       }
+      // If firstrun, schedule sync for all worlds
       if (firstrun) {
         const worlds = window.Module.FS.readdir(this.WORLDS_SYNC_BASE_PATH);
         for (const world of worlds) {
@@ -303,9 +319,14 @@ export class StorageManager {
           }
         }
       }
+      // Otherwise, schedule sync for the active world
       else {
         this.scheduleWorldSync(worldName);
       }
+    }
+    else {
+      console.log(`StorageManager: File changed (no sync): ${path}`);
+      this.minetestConsole?.print(`StorageManager: File changed (no sync): ${path}`);
     }
   }
 
@@ -313,7 +334,13 @@ export class StorageManager {
     // Normalize the path
     const path = filePath.replace(/\/[^\/]+\/\.\.\//g, '/');
     if (path.startsWith('/minetest/worlds/')) {
-      this.deleteDirectory(path);
+      const worldName = path.match(/^\/minetest\/worlds\/([^\/]+)\//)?.[1];
+      if (!worldName) {
+        console.error(`StorageManager: No world name found in path: ${path}`);
+        return;
+      }
+      // Sync will remove the world from tracked worlds and clean up the world directory in IndexedDB
+      this.scheduleWorldSync(worldName);
     }
   }
 
@@ -330,8 +357,7 @@ export class StorageManager {
 
     this._hasCopiedToModuleFS = true;
     // Load worlds and mods data from IndexedDB
-    await this.copyIdbPathToModuleFS(this.WORLDS_SYNC_BASE_PATH);
-    await this.copyIdbPathToModuleFS(this.MODS_SYNC_BASE_PATH);
+    await this.copyIdbPathToModuleFS();
   }
 
   // Get formatted stats for display

@@ -168,7 +168,7 @@ export class IDBManagerDexie {
     }
   }
 
-  async getAllFiles(basePath: string | null = null): Promise<{ path: string; content: Uint8Array; stats: FileStats }[]> {
+  async getAllFiles(basePath: string | null = null): Promise<FileRecord[]> {
     try {
       const db = await this.ensureDbInitialized();
       
@@ -185,11 +185,7 @@ export class IDBManagerDexie {
         files = await db.files.toArray();
       }
       
-      return files.map(file => ({
-        path: file.path,
-        content: file.content,
-        stats: file.stats
-      }));
+      return files;
     } catch (error) {
       console.error('IDBManagerDexie: Error getting all files:', error);
       throw new Error('Error getting all files: ' + error);
@@ -238,18 +234,14 @@ export class IDBManagerDexie {
       
       // Delete the directory record
       await db.directories.delete(dirPath);
+      await db.directories.where('path').startsWith(dirPath.endsWith("/") ? dirPath : dirPath + "/").delete();
       
       // Delete all files that start with this directory path
-      const filesToDelete = await db.files
+      await db.files
         .where('path')
-        .startsWith(dirPath)
-        .toArray();
-      
-      for (const file of filesToDelete) {
-        await db.files.delete(file.path);
-      }
-      
-      return Promise.resolve();
+        .startsWith(dirPath.endsWith("/") ? dirPath : dirPath + "/")
+        .delete();
+
     } catch (error) {
       console.error('IDBManagerDexie: Error deleting directory:', dirPath, error);
       throw new Error('Error deleting directory: ' + error);
