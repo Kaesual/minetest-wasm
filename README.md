@@ -12,6 +12,10 @@ There's an inofficial [Luanti Community](https://app.cg/c/luanti) there, too, wh
 roadmap can be discussed, and the game can be played there, too. Also, I've switched the default minetest 
 game for VoxeLibre as the initially loaded game, to offer a more "Minecraft-like" out-of-the-box experience.
 
+![Screenshot of Luanti running in app.cg](assets/screenshot.jpg)
+
+### Status of this repository
+
 This build does not use the latest version of Luanti, and not much has been updated in the web assembly 
 build pipeline. Anyone who is interested in working on this together is very welcome.
 
@@ -23,24 +27,14 @@ List of meaningful changes:
 - With this indexedDb storage backend, the Luanti web client can be embedded and run in iframes. This is convenient, as it allows better integration in existing web projects.
 - The original repo only comes with minetest_game, which is a bit underwhelming. Since I wanted to showcase a cool game integration, I switched that for VoxeLibre which now comes pre-loaded as the default game. I just updated it to the most recent version, too (0.90.1 as of today).
 
-If you want to embed this Luanti Web build as an iframe, the outer page as well as the iframed page need to set the following headers:
-
-Both:
-- Cross-Origin-Embedder-Policy require-corp
-
-Outer page:
-- Cross-Origin-Opener-Policy same-origin
-
-Inner page (in iframe):
-- Cross-Origin-Opener-Policy cross-origin
-- Cross-Origin-Resource-Policy cross-origin (only on resource files)
-
 Update 2025-08-10:
 - I've connected with paradust, the maintainer of the repository this one has been forked from
 - There's a [Discord community](https://discord.gg/APmB9j2M) for Luanti WASM now, for development related discussions, feedback, feature requests etc.
 - You're still invited to join the inofficial [Luanti community on app.cg](https://app.cg/c/luanti) if you want to get in touch
 - I will try to upstream my storage changes to the original repository
 - At the same time, I consider making an app.cg-specific branch that connects the Luanti client with CG's user and community model, to enable a customized, community-integrated gameplay experience
+
+### Building Luanti
 
 No specific Ubuntu version is required for building (stated differently in the original README). I've 
 added a `build_all_with_docker.sh` script that uses a docker container for building and does not 
@@ -49,9 +43,28 @@ have any other specific system requirements (only tested on Linux though 🐧❤
     cd minetest-wasm
     ./build_all_with_docker.sh
 
+The build results will be available in the `www/` folder after the build has completed. You can host the content of this folder on your web server.
+
+Note: Make sure that the user runs `./build_all_with_docker.sh` also owns the project folder. This script (and `app/docker.sh` which it calls) mounts the project folder to docker and also run as the user who calls the script.
+
 I've also added some patches to hook into the saving to disk process, to trigger a synchronization with 
 indexeddb right after the save. My specific use case (cross-origin iframes: Embed Luanti web anywhere) only 
 works with indexedDb, but I might look into FileSystemDirectoryHandle to enable a direct local sync directory.
+
+### Running in an iframe
+
+If you want to embed this Luanti Web build as an iframe, the outer page as well as the iframed page need to set the following headers:
+
+Outer page:
+- Cross-Origin-Embedder-Policy require-corp
+- Cross-Origin-Opener-Policy same-origin
+
+Inner page (in iframe):
+- Cross-Origin-Embedder-Policy require-corp
+- Cross-Origin-Opener-Policy cross-origin
+- Cross-Origin-Resource-Policy cross-origin (only required on resource files)
+
+### Update history
 
 2025-08-10 Update Notes:
 - reworked the indexedDb sync mechanism, so it reliably synchronizes all world files and folders, with a configurable debounce interval
@@ -63,6 +76,9 @@ works with indexedDb, but I might look into FileSystemDirectoryHandle to enable 
 =============
 
 Original README
+-------------------
+
+The original README is partially deprecated, use with caution.
 
 System Requirements
 -------------------
