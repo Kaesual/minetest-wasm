@@ -47,6 +47,12 @@ The build results will be available in the `www/` folder after the build has com
 
 Note: Make sure that the user runs `./build_all_with_docker.sh` also owns the project folder. This script (and `app/docker.sh` which it calls) mounts the project folder to docker and also run as the user who calls the script.
 
+The docker build pipeline generates two auxiliary docker images: `minetest_builder` and `minetest_app_builder`. Each of them will build one component of the actual app.
+
+- If your try to build with sudo, you might end up with broken container images because npm cache permissions can end up incorrect
+- The repository folder must be owned by the build user, who has to be added to the `docker` group
+- If you end up with broken build containers, you can always clean them up with `docker image rm minetest_app_builder && docker image rm minetest_builder`. The next build will re-create them.
+
 I've also added some patches to hook into the saving to disk process, to trigger a synchronization with 
 indexeddb right after the save. My specific use case (cross-origin iframes: Embed Luanti web anywhere) only 
 works with indexedDb, but I might look into FileSystemDirectoryHandle to enable a direct local sync directory.
