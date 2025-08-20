@@ -528,17 +528,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       }
     };
 
-    // Add worker injection script for proper thread communication
-    const workerInject = `
-      Module['print'] = (text) => {
-        postMessage({cmd: 'callHandler', handler: 'print', args: [text], threadId: Module['_pthread_self']()});
-      };
-      Module['printErr'] = (text) => {
-        postMessage({cmd: 'callHandler', handler: 'printErr', args: [text], threadId: Module['_pthread_self']()});
-      };
-      importScripts('minetest.js');
-    `;
-    window.Module['mainScriptUrlOrBlob'] = new Blob([workerInject], { type: "text/javascript" });
+    Module['mainScriptUrlOrBlob'] = 'minetest/worker.js';
     window.Module['onFullScreen'] = () => { fixGeometry(); };
 
     // Function to load the script

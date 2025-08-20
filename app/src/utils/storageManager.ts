@@ -103,7 +103,6 @@ export class StorageManager {
       return Promise.reject('FS or IDBManager not ready for IDB load');
     }
     
-    console.log('StorageManager-IDB: Starting initial load from IndexedDB');
     try {
       const files = await this.idbManager.getAllFiles();
       if (files.length === 0) {
@@ -112,20 +111,23 @@ export class StorageManager {
       }
       console.log(`StorageManager-IDB: Found ${files.length} file(s) to load into WasmFS.`);
 
+      const createdDirs = new Set<string>();
       for (const file of files) {
         try {
           // Create directory if it doesn't exist
           const dir = file.path.substring(0, file.path.lastIndexOf('/'));
-          if (dir && !window.Module.FS.analyzePath(dir).exists) {
+          if (dir && !createdDirs.has(dir)) {
             window.Module.FS.mkdirTree(dir);
+            createdDirs.add(dir);
           }
           
           // Ensure content is properly typed for writing to filesystem
-          if (file.content) {
+          if (file.content !== undefined && file.content !== null) {
             const content = file.content instanceof Uint8Array ? 
               file.content : 
               new Uint8Array(file.content);
               
+            console.log(`StorageManager-IDB: Writing file to WasmFS: ${file.path}`);
             window.Module.FS.writeFile(file.path, content);
           } else {
             console.log(`StorageManager-IDB: Empty content for file ${file.path}, skipping`);

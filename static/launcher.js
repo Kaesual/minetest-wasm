@@ -465,68 +465,13 @@ var Module = {
         this.totalDependencies = Math.max(this.totalDependencies, left);
         if (!mtLauncher || !mtLauncher.onprogress) return;
         mtLauncher.onprogress('wasm_module', (this.totalDependencies-left) / this.totalDependencies);
-    },
-    // Handler for file changes reported by C++ code
-    onFileChange: function(path) {
-        // Normalize the path before processing
-        path = normalizePath(path);
-
-        // if ((path.startsWith('/minetest/worlds/') || path.startsWith('/minetest/mods/')) && (typeof storageManager !== 'undefined' && storageManager)) {
-        if (path.startsWith('/minetest/worlds/') && typeof storageManager !== 'undefined' && storageManager) {
-            console.log("File changed:", path);
-            // For directories, we just need to ensure they exist in IndexedDB
-
-            let timeout = fileUpdateTimeouts.get(path);
-            if (timeout) {
-                clearTimeout(timeout);
-            }
-
-            timeout = setTimeout(() => {
-                const statResult = FS.stat(path);
-                const isDirectory = (statResult.mode & 16384) === 16384;
-                if (isDirectory) {
-                    storageManager.ensureDirectoryExists(path);
-                } else {
-                    // For files, read from WASMFS and persist to IndexedDB
-                    try {
-                        const content = FS.readFile(path, { encoding: 'binary' });
-                        storageManager.persistFile(path, content);
-                    } catch (e) {
-                        console.error("Error persisting file:", path, e);
-                    }
-                }
-            }, 1000);
-            fileUpdateTimeouts.set(path, timeout);
-        }
-    },
-
-    // Handler for file deletions reported by C++ code
-    onFileDelete: function(path) {
-        path = normalizePath(path);
-        console.log("File deleted:", path);
-        
-        // Check if storage manager is available
-        // if (typeof storageManager !== 'undefined' && storageManager) {
-        //     // For directories, always use deleteDirectory which handles both files and directories
-        //     storageManager.deleteDirectory(path);
-        // }
-    },
-}
+    }
+};
 
 Module['printErr'] = Module['print'];
 
-// This is injected into workers so that out/err are sent to the main thread.
-// This probably should be the default behavior, but doesn't seem to be for WasmFS.
-const workerInject = `
-  Module['print'] = (text) => {
-    postMessage({cmd: 'callHandler', handler: 'print', args: [text], threadId: Module['_pthread_self']()});
-  };
-  Module['printErr'] = (text) => {
-    postMessage({cmd: 'callHandler', handler: 'printErr', args: [text], threadId: Module['_pthread_self']()});
-  };
-  importScripts('minetest.js');
-`;
-Module['mainScriptUrlOrBlob'] = new Blob([workerInject], { type: "text/javascript" });
+// Custom worker script to direct stdout/stderr to the main thread.
+Module['mainScriptUrlOrBlob'] = RELEASE_DIR + '/worker.js';
 
 Module['onFullScreen'] = () => { fixGeometry(); };
 window.onerror = function(event) {

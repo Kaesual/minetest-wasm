@@ -15,7 +15,7 @@ mkdir "$ASSETS_DST_DIR"
 
 # Copy emscripten generated files
 pushd "$BUILD_DIR/minetest/src"
-EMSCRIPTEN_FILES="minetest.js minetest.wasm minetest.worker.js"
+EMSCRIPTEN_FILES="minetest.js minetest.wasm"
 for I in $EMSCRIPTEN_FILES; do
   cp -p "$I" "$RELEASE_DIR"
 done
@@ -35,6 +35,9 @@ popd
 # Copy React app build to www/
 echo "Copying React app build to www/"
 cp -a "$BASE_DIR/app/build/." "$WWW_DIR"
+
+echo "Copying worker.js to www/"
+cp -p "$BASE_DIR/static/worker.js" "$RELEASE_DIR/worker.js"
 
 # Copy base file system pack
 cp -p "$BUILD_DIR/fsroot.tar.zst" "$PACKS_DIR/base.pack"
