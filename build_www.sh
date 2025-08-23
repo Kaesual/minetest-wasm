@@ -15,7 +15,7 @@ mkdir "$ASSETS_DST_DIR"
 
 # Copy emscripten generated files
 pushd "$BUILD_DIR/minetest/src"
-EMSCRIPTEN_FILES="minetest.js minetest.wasm minetest.worker.js"
+EMSCRIPTEN_FILES="minetest.js minetest.wasm minetest.worker.js" # Todo: Is this correct?
 for I in $EMSCRIPTEN_FILES; do
   cp -p "$I" "$RELEASE_DIR"
 done
@@ -44,6 +44,9 @@ cp -p "$BUILD_DIR/minetest_game_fsroot.tar.zst" "$PACKS_DIR/minetest_game.pack"
 
 # Copy voxelibre_game pack
 cp -p "$BUILD_DIR/voxelibre_fsroot.tar.zst" "$PACKS_DIR/voxelibre.pack"
+
+# Copy mineclone_game pack
+cp -p "$BUILD_DIR/mineclone_fsroot.tar.zst" "$PACKS_DIR/mineclone.pack"
 
 echo "DONE"
 

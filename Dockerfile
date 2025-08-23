@@ -5,6 +5,7 @@ RUN echo "tzdata tzdata/Zones/Europe select Berlin" | debconf-set-selections
 RUN DEBIAN_FRONTEND=noninteractive apt-get update
 RUN DEBIAN_FRONTEND=noninteractive apt-get install -y git python3 build-essential cmake tclsh zip zstd gettext wget
 COPY ./docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
-RUN umask 000 && mkdir -p /minetest-wasm
+RUN chmod 755 /docker-entrypoint.sh
+RUN mkdir -p /minetest-wasm
+RUN chmod 777 /minetest-wasm
 ENTRYPOINT ["/docker-entrypoint.sh"]

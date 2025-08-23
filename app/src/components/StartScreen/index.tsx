@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useMinetestConsole, usePrefetchData, useStorageManager } from '../utils/GlobalContext';
-import { type GameOptions } from '../App';
-import { PROXIES, SUPPORTED_LANGUAGES } from '../utils/common';
+import { useMinetestConsole, usePrefetchData, useStorageManager } from '../../utils/GlobalContext';
+import { type GameOptions } from '../../App';
+import { PROXIES, SUPPORTED_LANGUAGES } from '../../utils/common';
 
 // Define game modes
 type GameMode = 'local' | 'host' | 'join';
 
 interface StartScreenProps {
   onStartGame: (options: GameOptions) => void;
-  onUpdateOptions: (options: Partial<GameOptions>) => void;
+  updateGameOptions: (options: Partial<GameOptions>) => void;
   currentOptions: GameOptions;
 }
 
@@ -19,12 +19,13 @@ interface FormValidation {
   gameSelection: boolean;
 }
 
-const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions, currentOptions }) => {
+const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOptions, currentOptions }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState<string>(currentOptions.language);
   const [selectedProxy, _setSelectedProxy] = useState<number>(parseInt(localStorage.getItem('luanti_wasm_selected_proxy') || '0'));
   const [selectedStorage, setSelectedStorage] = useState<string>(currentOptions.storagePolicy);
   const [isPreloading, setIsPreloading] = useState(true);
+  const [selectedGameId, setSelectedGameId] = useState<GameOptions['gameId']>('mineclone2');
   const [gameMode, setGameMode] = useState<GameMode>('local');
   const [joinCode, setJoinCode] = useState<string>('');
   const [joinCodeError, setJoinCodeError] = useState<string>('');
@@ -99,7 +100,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
     if (currentOptions.language === 'en') {
       const detectedLanguage = getDefaultLanguage();
       setSelectedLanguage(detectedLanguage);
-      onUpdateOptions({ language: detectedLanguage });
+      updateGameOptions({ language: detectedLanguage });
     }
   }, []);
 
@@ -107,21 +108,21 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newLanguage = e.target.value;
     setSelectedLanguage(newLanguage);
-    onUpdateOptions({ language: newLanguage });
+    updateGameOptions({ language: newLanguage });
   };
   
   // Handle proxy change
   const handleProxyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const index = parseInt(e.target.value);
     setSelectedProxy(index);
-    onUpdateOptions({ proxy: PROXIES[index][0] });
+    updateGameOptions({ proxy: PROXIES[index][0] });
   };
   
   // Handle storage policy change
   const handleStoragePolicyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newPolicy = e.target.value;
     setSelectedStorage(newPolicy);
-    onUpdateOptions({ storagePolicy: newPolicy });
+    updateGameOptions({ storagePolicy: newPolicy });
   };
   
   // Handle game mode change
@@ -142,7 +143,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
         storagePolicy: selectedStorage,
         minetestArgs: currentOptions.minetestArgs,
         mode: gameMode,
-        gameId: 'mineclone2'
+        gameId: selectedGameId,
       };
       
       if (gameMode === 'join') {
@@ -296,6 +297,21 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, onUpdateOptions,
             >
               <option value="indexeddb">Save worlds in browser</option>
               <option value="no-storage">No Storage</option>
+            </select>
+          </div>
+
+          <div className="form_row mb-4">
+            <label className="block mb-2">Select Game</label>
+            <select 
+              className="w-full p-3 rounded-lg border-2 border-gray-300 bg-white text-black"
+              value={selectedGameId}
+              onChange={(ev) => {
+                setSelectedGameId(ev.target.value as GameOptions['gameId']);
+              }}
+            >
+              <option value="mineclone2">VoxeLibre 0.90.1 (rich minecraft-like game)</option>
+              <option value="mineclone">Mineclone 0.116.1 (currently broken, some LUA error)</option>
+              <option value="minetest_game">Minetest Game (only building, no mobs)</option>
             </select>
           </div>
           

@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState, useLayoutEffect, useCallback, useMemo } from 'react';
-import { MinetestConsole, useMinetestConsole, usePrefetchData, useStorageManager } from '../utils/GlobalContext';
-import SnackBar from './SnackBar';
-import { type GameOptions } from '../App';
-import { PROXIES } from '../utils/common';
-
+import React, { useEffect, useRef, useState, useLayoutEffect, useCallback } from 'react';
+import { useMinetestConsole, usePrefetchData, useStorageManager } from '../../utils/GlobalContext';
+import SnackBar from '../SnackBar';
+import { type GameOptions } from '../../App';
+import { SettingsButton, SettingsComponent } from './Settings';
+import { fixGeometry as fixGeometryHelper, queryProxy } from './helpers';
+import PackManager from './packManager';
 
 interface RuntimeScreenProps {
   gameOptions: GameOptions;
@@ -36,101 +37,6 @@ declare global {
   }
 }
 
-function queryProxy(cmd: string, proxy: string) {
-  return new Promise<[string, string, string]>((resolve, reject) => {
-    let finished = false;
-    const ws = new WebSocket(proxy);
-    ws.addEventListener('open', (event) => {
-      ws.send(cmd);
-    });
-    ws.addEventListener('error', (event) => {
-      alert('Error initiating proxy connection');
-      finished = true;
-      reject(new Error('Received error'));
-    });
-    ws.addEventListener('close', (event) => {
-      if (!finished) {
-        alert('Proxy connection closed unexpectedly');
-        finished = true;
-        reject(new Error('Received close'));
-      }
-    });
-    ws.addEventListener('message', (event) => {
-      if (typeof event.data !== 'string') {
-        alert('Invalid message received from proxy');
-        finished = true;
-        reject(new Error('Invalid message'));
-        return;
-      }
-      finished = true;
-      ws.close();
-      resolve(event.data.split(' ') as [string, string, string]);
-    });
-  });
-}
-
-// Class to handle resource packs similar to the original launcher
-class PackManager {
-  private addedPacks = new Set<string>();
-  private installedPacks = new Set<string>();
-  private packPromises = new Map<string, Promise<void>>();
-  private minetestConsole: MinetestConsole;
-
-  constructor(minetestConsole: MinetestConsole) {
-    this.minetestConsole = minetestConsole;
-  }
-
-  async addPack(name: string, prefetchData: Uint8Array): Promise<void> {
-    if (name === 'devtest' || this.addedPacks.has(name)) {
-      return;
-    }
-
-    this.addedPacks.add(name);
-
-    if (this.packPromises.has(name)) {
-      return this.packPromises.get(name);
-    }
-
-    const promise = this.installPrefetchedPack(name, prefetchData);
-    this.packPromises.set(name, promise);
-    return promise;
-  }
-
-  async installPrefetchedPack(name: string, prefetchData: Uint8Array): Promise<void> {
-    if (!window._malloc || !window.stringToNewUTF8 || !window.emloop_install_pack || !window._free) {
-      this.minetestConsole.printErr(`Required WASM functions not available to install pack: ${name}`);
-      return Promise.reject(`Required WASM functions not available`);
-    }
-    try {
-      const receivedLength = prefetchData.length;
-
-      // Allocate memory and copy the data
-      const dataPtr = window._malloc(receivedLength);
-      window.HEAPU8.set(prefetchData, dataPtr);
-
-      // Install the pack
-      const namePtr = window.stringToNewUTF8(name);
-      window.emloop_install_pack(namePtr, dataPtr, receivedLength);
-
-      // Free the memory
-      window._free(namePtr);
-      window._free(dataPtr);
-
-      this.installedPacks.add(name);
-
-      this.minetestConsole.print(`Successfully installed pack: ${name}`);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.minetestConsole.printErr(`Error installing pack ${name}:` + errorMessage);
-      return Promise.reject(error);
-    }
-  }
-
-  isPackInstalled(name: string): boolean {
-    return this.installedPacks.has(name);
-  }
-}
-
 const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
@@ -154,64 +60,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
   aspectRatioRef.current = aspectRatio;
   const fixGeometry = useCallback(() => {
     if (!canvasRef.current || !canvasContainerRef.current) return;
-
-    const canvas = canvasRef.current;
-    const container = canvasContainerRef.current;
-
-    // Get container dimensions
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
-
-    let targetWidth = containerWidth;
-    let targetHeight = containerHeight;
-
-    // Apply resolution setting
-    let resolutionFactor = 1.0;
-    switch (resolutionRef.current) {
-      case 'low':
-        resolutionFactor = 0.5;
-        break;
-      case 'medium':
-        resolutionFactor = 0.75;
-        break;
-      case 'high':
-      default:
-        resolutionFactor = 1.0;
-        break;
-    }
-
-    targetWidth *= resolutionFactor;
-    targetHeight *= resolutionFactor;
-
-    // Apply aspect ratio constraint if needed
-    if (aspectRatioRef.current !== 'any') {
-      const ratioValues = aspectRatioRef.current.split(':').map(Number);
-      if (ratioValues.length === 2 && !ratioValues.includes(NaN)) {
-        const targetRatio = ratioValues[0] / ratioValues[1];
-        const currentRatio = targetWidth / targetHeight;
-
-        if (currentRatio > targetRatio) {
-          // Too wide, adjust width
-          targetWidth = targetHeight * targetRatio;
-        } else if (currentRatio < targetRatio) {
-          // Too tall, adjust height
-          targetHeight = targetWidth / targetRatio;
-        }
-      }
-    }
-
-    // Set canvas dimensions
-    canvas.width = Math.floor(targetWidth);
-    canvas.height = Math.floor(targetHeight);
-
-    // Set CSS dimensions to handle any scaling
-    canvas.style.width = '100%';
-    canvas.style.height = '100%';
-
-    // Notify the Module if it exists
-    if (window.Module && window.irrlicht_resize) {
-      window.irrlicht_resize(canvas.width, canvas.height);
-    }
+    fixGeometryHelper(canvasRef.current, canvasContainerRef.current, resolution, aspectRatio);
   }, []);
 
   // Handle aspect ratio change
@@ -319,8 +168,15 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       // Always install the base and voxelibre packs
       minetestConsole.print("Installing required game packs...");
       await packManager.addPack('base', prefetchData.result.base!);
-      // await packManager.addPack('minetest_game', prefetchData.result.minetest_game!);
-      await packManager.addPack('voxelibre', prefetchData.result.voxelibre!);
+      if (gameOptions.gameId === 'mineclone2') {
+        await packManager.addPack('voxelibre', prefetchData.result.voxelibre!);
+      }
+      else if (gameOptions.gameId === 'mineclone') {
+        await packManager.addPack('mineclone', prefetchData.result.mineclone!);
+      }
+      else if (gameOptions.gameId === 'minetest_game') {
+        await packManager.addPack('minetest_game', prefetchData.result.minetest_game!);
+      }
 
       // Set canvas size
       if (canvasRef.current) fixGeometry();
@@ -612,22 +468,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
     };
   }, []);
 
-  const helpListItems = useMemo(() => {
-    const items: string[] = ["You can see and change the keys in the menu by pressing ESC"];
-    if (gameOptions.mode === 'host' || gameOptions.mode === 'join') {
-      items.push(`The join code is: ${vpnClientCode}`);
-      items.push(`The proxy is: ${PROXIES.find(p => p[0] === gameOptions.proxy)?.[1]}`);
-    }
-    if (gameOptions.mode === 'join') {
-      items.push(`The host server address is: 172.16.0.1`);
-      items.push(`The host server port is: 30000`);
-    }
-    if (gameOptions.mode === 'host' || gameOptions.mode === 'local') {
-      items.push(`To save your game, always press ESC and go back to the main menu`);
-      items.push(`There, wait a few seconds before closing the game, otherwise your game might be lost or corrupted`);
-    }
-    return items;
-  }, [gameOptions.mode, vpnClientCode]);
+  
 
   return (
     <div className="h-[100vh] w-[100vw] flex flex-col bg-black relative overflow-hidden">
@@ -639,121 +480,22 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
         onMouseEnter={expandSettings}
         onMouseLeave={collapseSettingsWithDelay}
       >
-        {/* Collapsed state - just the cogwheel */}
         {!settingsExpanded && (
-          <button
-            onClick={expandSettings}
-            className="bg-gray-800 hover:bg-gray-700 text-white rounded-full p-2 shadow-lg"
-            style={{
-              opacity: 0.4
-            }}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
+          <SettingsButton expandSettings={expandSettings} />
         )}
-
-        {/* Expanded state - full settings panel */}
         {settingsExpanded && (
-          <div className="bg-gray-800 rounded-lg shadow-lg p-3 max-w-md animate-fadeIn">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-white font-semibold">Settings</h3>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 mb-2">
-              <div>
-                <label htmlFor="resolution" className="text-gray-300 text-sm block mb-1">Resolution</label>
-                <select
-                  id="resolution"
-                  className="bg-gray-700 text-white rounded p-1 w-full"
-                  value={resolution}
-                  onChange={handleResolutionChange}
-                >
-                  <option value="high">High Res</option>
-                  <option value="medium">Medium</option>
-                  <option value="low">Low Res</option>
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="aspectRatio" className="text-gray-300 text-sm block mb-1">Aspect Ratio</label>
-                <select
-                  id="aspectRatio"
-                  className="bg-gray-700 text-white rounded p-1 w-full"
-                  value={aspectRatio}
-                  onChange={handleAspectRatioChange}
-                >
-                  <option value="any">Fit Screen</option>
-                  <option value="4:3">4:3</option>
-                  <option value="16:9">16:9</option>
-                  <option value="5:4">5:4</option>
-                  <option value="21:9">21:9</option>
-                  <option value="32:9">32:9</option>
-                  <option value="1:1">1:1</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <button
-                className="bg-blue-600 hover:bg-blue-700 text-white rounded p-1 px-3 text-sm"
-                onClick={toggleConsole}
-              >
-                {showConsole ? 'Hide Console' : 'Show Console'}
-              </button>
-
-              {gameOptions.storagePolicy === 'indexeddb' && (
-                <div className="flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-400 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                  </svg>
-                  <span className="text-gray-300 text-sm">
-                    {(() => {
-                      const stats = storageManager!.getFormattedStats();
-                      const extractMB = (str: string) => {
-                        const match = str.match(/\(([\d\.]+)\s*([KMG]B)\)/i);
-                        if (match) {
-                          const value = parseFloat(match[1]);
-                          const unit = match[2].toUpperCase();
-                          if (unit === 'KB') return value / 1024;
-                          if (unit === 'MB') return value;
-                          if (unit === 'GB') return value * 1024;
-                        }
-                        return 0;
-                      };
-
-                      const worldsMB = extractMB(stats.worlds);
-                      const modsMB = extractMB(stats.mods);
-                      const totalMB = worldsMB + modsMB;
-
-                      if (totalMB < 1) {
-                        return `${Math.round(totalMB * 1024)} KB`;
-                      } else {
-                        return `${totalMB.toFixed(2)} MB`;
-                      }
-                    })()}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            <ul className="text-sm list-disc ml-4">
-              {helpListItems.map((item, index) => (
-                <li key={index}>{item}</li>
-              ))}
-            </ul>
-
-            {isLoading && (
-              <div className="mt-2 flex items-center gap-2">
-                <div className="h-2 w-full bg-gray-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-blue-600 animate-pulse" style={{ width: '100%' }}></div>
-                </div>
-                <span className="text-gray-300 text-sm whitespace-nowrap">Loading...</span>
-              </div>
-            )}
-          </div>
+          <SettingsComponent
+            gameOptions={gameOptions}
+            vpnClientCode={vpnClientCode}
+            isLoading={isLoading}
+            resolution={resolution}
+            handleResolutionChange={handleResolutionChange}
+            aspectRatio={aspectRatio}
+            handleAspectRatioChange={handleAspectRatioChange}
+            showConsole={showConsole}
+            toggleConsole={toggleConsole}
+            storageManager={storageManager!}
+          />
         )}
       </div>
 

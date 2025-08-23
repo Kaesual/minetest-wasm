@@ -13,7 +13,7 @@ export interface GameOptions {
   storagePolicy: string;
   minetestArgs: MinetestArgs;
   mode: 'local' | 'host' | 'join';
-  gameId: 'minetest_game' | 'mineclone2';
+  gameId: 'minetest_game' | 'mineclone' | 'mineclone2';
   playerName?: string;
   joinCode?: string;
   worldName?: string;
@@ -37,7 +37,7 @@ function App() {
     setIsGameStarted(true);
   }, []);
   
-  const handleUpdateOptions = useCallback((options: Partial<GameOptions>) => {
+  const updateGameOptions = useCallback((options: Partial<GameOptions>) => {
     setGameOptions(prevOptions => ({
       ...prevOptions,
       ...options
@@ -57,7 +57,7 @@ function App() {
         {!isGameStarted ? (
           <StartScreen 
             onStartGame={handleStartGame}
-            onUpdateOptions={handleUpdateOptions}
+            updateGameOptions={updateGameOptions}
             currentOptions={gameOptions}
           />
         ) : (

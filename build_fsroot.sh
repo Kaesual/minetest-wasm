@@ -75,13 +75,27 @@ mv games/voxelibre games/mineclone2
 cd games/mineclone2
 rm -rf ".git" ".github"
 popd
-
 # Make voxelibre_fsroot.tar
 rm -f voxelibre_fsroot.tar
 pushd voxelibre_fsroot
 tar cf ../voxelibre_fsroot.tar .
 popd
-
 # Compress with ZSTD
 rm -f voxelibre_fsroot.tar.zst
 zstd --ultra -22 voxelibre_fsroot.tar
+
+# Make mineclone_game_fsroot.tar
+mkdir -p mineclone_fsroot/minetest/games
+pushd mineclone_fsroot/minetest
+cp -a "$SOURCES_DIR"/mineclone games
+cd games/mineclone
+rm -rf ".git" ".github"
+popd
+# Make mineclone_fsroot.tar
+rm -f mineclone_fsroot.tar
+pushd mineclone_fsroot
+tar cf ../mineclone_fsroot.tar .
+popd
+# Compress with ZSTD
+rm -f mineclone_fsroot.tar.zst
+zstd --ultra -22 mineclone_fsroot.tar
