@@ -9,6 +9,7 @@ import PackManager from './packManager';
 interface RuntimeScreenProps {
   gameOptions: GameOptions;
   onGameStatus: (status: 'running' | 'failed') => void;
+  zipLoaderPromise: Promise<Uint8Array> | null;
 }
 
 declare global {
@@ -37,7 +38,7 @@ declare global {
   }
 }
 
-const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus }) => {
+const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus, zipLoaderPromise }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const [showConsole, setShowConsole] = useState(false);
@@ -150,18 +151,19 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       if (!storageManager) {
         throw new Error('StorageManager does not exist');
       }
-      if (await storageManager.isInitialized) {
-        if (!storageManager.hasCopiedToModuleFS) {
-          await storageManager.copyToModuleFS();
-        }
-      }
-      else {
+      if (!(await storageManager.isInitialized)) {
         // Initialize the storage manager with the selected storage policy
-        await storageManager!.initialize(
+        await storageManager.initialize(
           { policy: gameOptions.storagePolicy },
           minetestConsole,
-          true
         );
+      }
+      if (zipLoaderPromise) {
+        const zipFile = await zipLoaderPromise;
+        await storageManager.restoreFromZip(zipFile);
+      }
+      if (!storageManager.hasCopiedToModuleFS) {
+        await storageManager.copyToModuleFS();
       }
       minetestConsole.print(`Storage initialized with policy: ${gameOptions.storagePolicy}`);
 

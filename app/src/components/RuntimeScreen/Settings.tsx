@@ -1,7 +1,7 @@
 import { GameOptions } from "../../App";
 import { PROXIES } from "../../utils/common";
-import { useMemo } from "react";
-import { type StorageManager } from "../../utils/storageManager";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { type StorageStats, type StorageManager } from "../../utils/storageManager";
 
 interface SettingsProps {
   gameOptions: GameOptions;
@@ -28,7 +28,81 @@ export function SettingsComponent({
   toggleConsole,
   storageManager,
 }: SettingsProps) {
+  const [storageStats, setStorageStats] = useState<StorageStats>(storageManager.getStats());
+  const [secondsToSync, setSecondsToSync] = useState<number | null>(null);
+  const [syncInProgress, setSyncInProgress] = useState<boolean>(false);
+  const [downloadInProgress, setDownloadInProgress] = useState<boolean>(false);
+  const [restartClicked, setRestartClicked] = useState<boolean>(false);
 
+  useEffect(() => {
+    const listener = (stats: StorageStats) => {
+      setStorageStats(stats);
+    };
+    storageManager.addStatsChangeListener(listener);
+    return () => {
+      storageManager.removeStatsChangeListener(listener);
+    };
+  }, [storageManager]);
+
+  // Refresh the sync info every second
+  useEffect(() => {
+    const refreshNextUpdate = () => {
+      const syncInfo = storageManager.worldSyncInfo;
+      if (syncInfo.nextSync) {
+        const now = Date.now();
+        const secondsToSync = Math.floor((syncInfo.nextSync - now) / 1000);
+        setSecondsToSync(secondsToSync);
+      }
+      else {
+        setSecondsToSync(null);
+      }
+      setSyncInProgress(syncInfo.inProgress);
+    };
+    refreshNextUpdate();
+    const interval = setInterval(refreshNextUpdate, 1000);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [storageManager]);
+
+  // Sync now button
+  const syncNow = useCallback(async () => {
+    setSyncInProgress(true);
+    setSecondsToSync(null);
+    try {
+      await storageManager.executeWorldSync();
+    }
+    finally {
+      setSyncInProgress(false);
+    }
+  }, [storageManager]);
+
+  // Download all files as zip button
+  const downloadAllFilesAsZip = useCallback(async () => {
+    // Storage Manager syncs automatically when downloading
+    setSyncInProgress(true);
+    setDownloadInProgress(true);
+    setSecondsToSync(null);
+    try {
+      await storageManager.downloadAllFilesAsZip();
+    }
+    finally {
+      setSyncInProgress(false);
+      setDownloadInProgress(false);
+    }
+  }, [storageManager]);
+
+  // Format the stats for display
+  const formattedStats = useMemo(() => {
+    if (storageStats.totalSize === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(storageStats.totalSize) / Math.log(k));
+    const size = parseFloat((storageStats.totalSize / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    return `${storageStats.fileCount} files (${size})`;
+  }, [storageStats]);
+
+  // Help list items
   const helpListItems = useMemo(() => {
     const items: string[] = ["You can see and change the keys in the menu by pressing ESC"];
     if (gameOptions.mode === 'host' || gameOptions.mode === 'join') {
@@ -84,49 +158,85 @@ export function SettingsComponent({
             <option value="1:1">1:1</option>
           </select>
         </div>
+
+        <div>
+          <button
+            className="bg-blue-600 hover:bg-blue-700 text-white rounded p-1 px-3 text-sm w-full h-full"
+            onClick={toggleConsole}
+          >
+            {showConsole ? 'Hide Console' : 'Show Console'}
+          </button>
+        </div>
+        <div>
+          <button
+            className="bg-blue-600 hover:bg-blue-700 text-white rounded p-1 px-3 text-sm w-full h-full"
+            onClick={() => {
+              if (restartClicked) {
+                window.location.reload();
+              }
+              else {
+                setRestartClicked(true);
+              }
+            }}
+          >
+            {restartClicked ? '⚠️ Confirm force reload' : '⚠️ Force reload (will not sync!)'}
+          </button>
+        </div>
       </div>
 
-      <div className="flex items-center justify-between">
-        <button
-          className="bg-blue-600 hover:bg-blue-700 text-white rounded p-1 px-3 text-sm"
-          onClick={toggleConsole}
-        >
-          {showConsole ? 'Hide Console' : 'Show Console'}
-        </button>
+      <div className="flex items-center justify-between my-2">
+        <h3 className="text-white font-semibold">Storage</h3>
+      </div>
 
-        {gameOptions.storagePolicy === 'indexeddb' && (
-          <div className="flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-400 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        {gameOptions.storagePolicy === 'indexeddb' && <>
+          <div>
+            {syncInProgress ? (
+              <span className="text-green-400 text-sm">
+                ⌛ Synchronizing...
+              </span>
+            ) : secondsToSync !== null ? (
+              <span className="text-gray-300 text-sm">
+                ⏱️ Files changed, syncing in {secondsToSync}s
+              </span>
+            ) : (
+              <span className="text-gray-300 text-sm">
+                ✅ Synchronized
+              </span>
+            )}
+          </div>
+          <div className="flex items-center justify-end gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
             </svg>
             <span className="text-gray-300 text-sm">
-              {(() => {
-                const stats = storageManager.getFormattedStats();
-                const extractMB = (str: string) => {
-                  const match = str.match(/\(([\d\.]+)\s*([KMG]B)\)/i);
-                  if (match) {
-                    const value = parseFloat(match[1]);
-                    const unit = match[2].toUpperCase();
-                    if (unit === 'KB') return value / 1024;
-                    if (unit === 'MB') return value;
-                    if (unit === 'GB') return value * 1024;
-                  }
-                  return 0;
-                };
-
-                const worldsMB = extractMB(stats.worlds);
-                const modsMB = extractMB(stats.mods);
-                const totalMB = worldsMB + modsMB;
-
-                if (totalMB < 1) {
-                  return `${Math.round(totalMB * 1024)} KB`;
-                } else {
-                  return `${totalMB.toFixed(2)} MB`;
-                }
-              })()}
+              {formattedStats}
             </span>
           </div>
-        )}
+          
+          <div>
+            <button
+              className="bg-blue-600 hover:bg-blue-700 text-white rounded p-1 px-3 text-sm w-full h-full"
+              onClick={syncNow}
+              disabled={syncInProgress}
+            >
+              {syncInProgress ? 'Syncing...' : 'Sync Now'}
+            </button>
+          </div>
+          <div>
+            <button
+              className="bg-blue-600 hover:bg-blue-700 text-white rounded p-1 px-3 text-sm w-full h-full"
+              onClick={downloadAllFilesAsZip}
+              disabled={syncInProgress || downloadInProgress}
+            >
+              Sync &amp; Download
+            </button>
+          </div>
+        </>}
+      </div>
+
+      <div className="flex items-center justify-between my-2">
+        <h3 className="text-white font-semibold">Help</h3>
       </div>
 
       <ul className="text-sm list-disc ml-4">

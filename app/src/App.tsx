@@ -23,6 +23,7 @@ const initial_proxy = PROXIES[parseInt(localStorage.getItem('luanti_wasm_selecte
 
 function App() {
   const [isGameStarted, setIsGameStarted] = useState(false);
+  const [zipLoaderPromise, setZipLoaderPromise] = useState<Promise<Uint8Array> | null>(null);
   const [gameOptions, setGameOptions] = useState<GameOptions>({
     language: 'en',
     proxy: initial_proxy[0],
@@ -59,11 +60,14 @@ function App() {
             onStartGame={handleStartGame}
             updateGameOptions={updateGameOptions}
             currentOptions={gameOptions}
+            zipLoaderPromise={zipLoaderPromise}
+            setZipLoaderPromise={setZipLoaderPromise}
           />
         ) : (
           <RuntimeScreen
             gameOptions={gameOptions}
             onGameStatus={handleGameStatus}
+            zipLoaderPromise={zipLoaderPromise}
           />
         )}
       </GlobalProvider>

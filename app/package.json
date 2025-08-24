@@ -7,6 +7,7 @@
     "@types/node": "^22.15.0",
     "@types/react": "^19.1.4",
     "@types/react-dom": "^19.1.4",
+    "dayjs": "^1.11.13",
     "dexie": "^4.0.11",
     "fflate": "^0.8.2",
     "react": "^19.1.0",

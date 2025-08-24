@@ -1,7 +1,9 @@
 import { FileStats, IDBManagerDexie } from './IDBManagerDexie';
 import { type MinetestConsole } from './GlobalContext';
+import { zip, unzip, type Unzipped } from 'fflate';
+import dayjs from 'dayjs';
 
-interface StorageStats {
+export interface StorageStats {
   fileCount: number;
   totalSize: number;
   lastUpdate: Date | null;
@@ -12,6 +14,7 @@ export class StorageManager {
   private storagePolicy: string = 'no-storage';
   private _isInitialized: boolean | Promise<boolean> = false;
   private _hasCopiedToModuleFS: boolean = false;
+  private statsChangeListeners: Set<((stats: StorageStats) => void)> = new Set();
   
   private worldsStats: StorageStats = {
     fileCount: 0,
@@ -49,23 +52,13 @@ export class StorageManager {
   }
   
   // Initialize storage manager
-  async initialize(storageOptions: { policy: string }, minetestConsole: MinetestConsole, copyToModuleFS: boolean = false): Promise<void> {
+  async initialize(storageOptions: { policy: string }, minetestConsole: MinetestConsole): Promise<void> {
     this._isInitialized = new Promise<boolean>(async (resolve, reject) => {
       this.minetestConsole = minetestConsole;
       if (this.storagePolicy === storageOptions.policy) {
         this.minetestConsole.print('StorageManager: Already initialized with identical policy');
         resolve(true);
         return;
-      }
-  
-      // If copyToModuleFS is set (and only then), Module.FS will be used
-      if (copyToModuleFS) {
-        if (!window.Module?.FS) {
-          throw new Error('Module.FS is required for copyToModuleFS, but not available. This can happen if the Emscripten Module is not loaded yet.');
-        }
-        if (storageOptions.policy !== 'indexeddb') {
-          throw new Error('Module.FS and policy indexeddb is required for copyToModuleFS, but not provided.');
-        }
       }
   
       this.storagePolicy = storageOptions.policy;
@@ -79,10 +72,7 @@ export class StorageManager {
             this.idbManager = idbManagerInstance;
             this.minetestConsole.print('StorageManager: IndexedDB initialized for persistence.');
           }
-          if (copyToModuleFS) {
-            await this.copyToModuleFS();
-          }
-          await this.updateStorageStats();
+          this.updateStorageStats();
         } catch (e) {
           console.error('StorageManager: Failed to initialize IndexedDB backend.', e);
           this.minetestConsole.printErr('StorageManager: Failed to initialize IndexedDB backend.');
@@ -114,6 +104,9 @@ export class StorageManager {
 
       for (const file of files) {
         try {
+          // Set stats
+          this.fileStats.set(file.path, file.stats);
+
           // Create directory if it doesn't exist
           const dir = file.path.substring(0, file.path.lastIndexOf('/'));
           if (dir && !window.Module.FS.analyzePath(dir).exists) {
@@ -134,6 +127,7 @@ export class StorageManager {
           console.error('StorageManager-IDB: Error writing file to WasmFS:', file.path, e);
         }
       }
+      this.updateStorageStats();
       console.log('StorageManager-IDB: Finished loading files from IndexedDB into WasmFS.');
     } catch (e) {
       console.error('StorageManager-IDB: Error during initial load from IndexedDB:', e);
@@ -165,6 +159,7 @@ export class StorageManager {
     } catch (e) {
       console.error('StorageManager: Error calculating IndexedDB stats:', e);
     }
+    this.notifyStatsChange();
   }
 
   private alwaysSync: string[] = [
@@ -199,15 +194,52 @@ export class StorageManager {
     return changed;
   }
 
-  private async executeWorldSync() {
-    if (this.storagePolicy !== 'indexeddb') {
+  private async syncAlwaysSync(): Promise<boolean> {
+    let changed = false;
+    for (const path of this.alwaysSync) {
+      try {
+        const newStats = window.Module.FS.stat(path);
+        const isDirectory = (newStats.mode & 0x4000) === 0x4000;
+        if (isDirectory) {
+          changed = (await this.recursiveSync(path)) || changed;
+          await this.ensureDirectoryExists(path);
+        }
+        else {
+          const oldStats = this.fileStats.get(path);
+          if (oldStats === undefined || newStats.mtime > oldStats.mtime) {
+            changed = true;
+            this.fileStats.set(path, newStats);
+            this.minetestConsole?.print(`StorageManager: Updating file: ${path}`);
+            await this.persistFile(path, window.Module.FS.readFile(path, { encoding: 'binary' }), newStats);
+          }
+        }
+      } catch (e) {
+        console.error(`StorageManager: Error syncing always sync file ${path}:`, e);
+        this.minetestConsole?.printErr(`StorageManager: Error syncing always sync file ${path}: ${e}`);
+      }
+    }
+    return changed;
+  }
+
+  private worldSyncInProgress: boolean = false;
+  public async executeWorldSync() {
+    if (this.storagePolicy !== 'indexeddb' || this.worldSyncInProgress) {
       return;
     }
+    this.worldSyncInProgress = true;
     let changed = false;
     if (this.worldSyncTimeout !== undefined) {
-      // Only clear the timeout here, it's reset to undefined at the end of the function
-      // This makes sure that executeWorldSync can be called directly without waiting for the debounce delay
       clearTimeout(this.worldSyncTimeout);
+      this.worldSyncTimeout = undefined;
+    }
+    this.nextWorldSyncTime = 0;
+    // If no worlds to sync, sync alwaysSync files, otherwise
+    // syncAlwaysSync will be called in the loop belows
+    if (this.worldNamesToSync.size === 0) {
+      changed = (await this.syncAlwaysSync()) || changed;
+      if (changed) {
+        this.updateStorageStats();
+      }
     }
     // Sync each world
     while (this.worldNamesToSync.size > 0) {
@@ -240,42 +272,22 @@ export class StorageManager {
         }
       }
       // In every sync loop, sync alwaysSync files and ensure directories
-      for (const path of this.alwaysSync) {
-        try {
-          const newStats = window.Module.FS.stat(path);
-          const isDirectory = (newStats.mode & 0x4000) === 0x4000;
-          if (isDirectory) {
-            changed = (await this.recursiveSync(path)) || changed;
-            await this.ensureDirectoryExists(path);
-          }
-          else {
-            const oldStats = this.fileStats.get(path);
-            if (oldStats === undefined || newStats.mtime > oldStats.mtime) {
-              changed = true;
-              this.fileStats.set(path, newStats);
-              this.minetestConsole?.print(`StorageManager: Updating file: ${path}`);
-              await this.persistFile(path, window.Module.FS.readFile(path, { encoding: 'binary' }), newStats);
-            }
-          }
-        } catch (e) {
-          console.error(`StorageManager: Error syncing always sync file ${path}:`, e);
-          this.minetestConsole?.printErr(`StorageManager: Error syncing always sync file ${path}: ${e}`);
-        }
-      }
+      changed = (await this.syncAlwaysSync()) || changed;
       if (changed) {
         this.updateStorageStats();
       }
     }
-    this.worldSyncTimeout = undefined;
+    this.worldSyncInProgress = false;
   }
 
   private scheduleWorldSync(worldName: string): void {
     this.worldNamesToSync.add(worldName);
-    if (this.worldSyncTimeout !== undefined || !this.autoSync) {
+    if (this.worldSyncInProgress || !this.autoSync) {
       return;
     }
 
     this.worldSyncTimeout = setTimeout(this.executeWorldSync.bind(this), this.autoSyncDebounceDelay);
+    this.nextWorldSyncTime = Date.now() + this.autoSyncDebounceDelay;
   }
 
   get isInitialized(): boolean | Promise<boolean> {
@@ -286,8 +298,49 @@ export class StorageManager {
     return this._hasCopiedToModuleFS;
   }
 
+  get worldSyncInfo(): { nextSync: number | null, inProgress: boolean } {
+    return {
+      nextSync: this.nextWorldSyncTime > 0 ? this.nextWorldSyncTime : null,
+      inProgress: this.worldSyncInProgress,
+    };
+  }
+
   setMinetestConsole(minetestConsole: MinetestConsole): void {
     this.minetestConsole = minetestConsole;
+  }
+
+  addStatsChangeListener(listener: (stats: StorageStats) => void): void {
+    this.statsChangeListeners.add(listener);
+  }
+
+  removeStatsChangeListener(listener: (stats: StorageStats) => void): void {
+    this.statsChangeListeners.delete(listener);
+  }
+
+  private notifyStatsChange(): void {
+    const stats = this.getStats();
+    for (const listener of Array.from(this.statsChangeListeners)) {
+      listener(stats);
+    }
+  }
+
+  public getStats(): StorageStats {
+    let lastUpdate: Date | null = null;
+    if (this.worldsStats.lastUpdate && this.modsStats.lastUpdate) {
+      lastUpdate = this.worldsStats.lastUpdate > this.modsStats.lastUpdate ? this.worldsStats.lastUpdate : this.modsStats.lastUpdate;
+    }
+    else if (this.worldsStats.lastUpdate) {
+      lastUpdate = this.worldsStats.lastUpdate;
+    }
+    else if (this.modsStats.lastUpdate) {
+      lastUpdate = this.modsStats.lastUpdate;
+    }
+    const stats: StorageStats = {
+      fileCount: this.worldsStats.fileCount + this.modsStats.fileCount,
+      totalSize: this.worldsStats.totalSize + this.modsStats.totalSize,
+      lastUpdate,
+    };
+    return stats;
   }
 
   public fileChanged(filePath: string): void {
@@ -367,24 +420,103 @@ export class StorageManager {
     await this.copyIdbPathToModuleFS();
   }
 
-  // Get formatted stats for display
-  getFormattedStats(): { worlds: string, mods: string } {
-    const formatSize = (bytes: number): string => {
-      if (bytes === 0) return '0 Bytes';
-      const k = 1024;
-      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
-      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    };
+  public async downloadAllFilesAsZip(): Promise<void> {
+    if (!this.idbManager) {
+      console.error('StorageManager: No IDBManager available for download operation');
+      return;
+    }
     
-    return {
-      worlds: `${this.worldsStats.fileCount} files (${formatSize(this.worldsStats.totalSize)})`,
-      mods: `${this.modsStats.fileCount} files (${formatSize(this.modsStats.totalSize)})`
-    };
+    // First, sync all files
+    await this.executeWorldSync();
+
+    const files = await this.idbManager.getAllFiles();
+    const zipContent: Record<string, Uint8Array> = {};
+    for (const file of files) {
+      zipContent[file.path] = file.content;
+    }
+    const zipFile = await new Promise<Uint8Array>((resolve, reject) => {
+      zip(
+        zipContent,
+        {
+          level: 9,
+          // consume: true,
+        },
+        (err, data) => {
+          if (err) {
+            reject(err);
+          }
+          else {
+            resolve(data);
+          }
+        }
+      );
+    });
+    const zipBlob = new Blob([zipFile], { type: 'application/zip' });
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.href = url;
+    a.download = `minetest_storage_${dayjs().format('YYYY-MM-DD_HH-mm')}.zip`;
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  public async restoreFromZip(zipFile: Uint8Array): Promise<void> {
+    if (!this.idbManager) {
+      console.error('StorageManager: No IDBManager available for restore operation');
+      return;
+    }
+    console.log('StorageManager: Restoring from zip');
+    const unzipped = await new Promise<Unzipped>((resolve, reject) => {
+      unzip(
+        zipFile,
+        {},
+        (err, data) => {
+          if (err) {
+            reject(err);
+          }
+          else {
+            resolve(data);
+          }
+        }
+      );
+    });
+    await this.idbManager.clearDatabase();
+    this.fileStats.clear();
+    const addedDirectories: Set<string> = new Set();
+    const now = Math.floor(Date.now() / 1000);
+    for (const file of Object.keys(unzipped)) {
+      if (!file.startsWith('/minetest/')) {
+        console.error('StorageManager: File does not start with /minetest/', file);
+        continue;
+      }
+      const relativePath = file.slice('/minetest/'.length);
+      console.log("Restoring file", file);
+      const pathFragments = relativePath.split('/');
+      for (let i = 1; i < pathFragments.length; i++) {
+        const dirPath = '/minetest/' + pathFragments.slice(0, i).join('/');
+        if (dirPath !== '/minetest/' && !addedDirectories.has(dirPath)) {
+          await this.idbManager.storeDirectory(dirPath);
+          addedDirectories.add(dirPath);
+        }
+      }
+      const stats: FileStats = {
+        mtime: now,
+        atime: now,
+        ctime: now,
+        size: unzipped[file].length,
+        mode: 0, // only used for directory checks
+      };
+      this.fileStats.set(file, stats);
+      await this.idbManager.saveFile(file, unzipped[file], stats);
+    }
+    this.updateStorageStats();
   }
 
   // Clear storage
-  async clearStorage(area: string = 'all', force: boolean = false): Promise<void> {
+  async clearStorage(area: string = 'all'): Promise<void> {
     if (!this.idbManager) {
       console.error('StorageManager: No IDBManager available for clear operation');
       return;

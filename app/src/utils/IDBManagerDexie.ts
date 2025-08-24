@@ -11,17 +11,19 @@ interface DirectoryRecord {
 }
 
 export interface FileStats {
+  // relevant
   mtime: number;
-  atime: number;
-  ctime: number;
   size: number;
-  ino: number;
   mode: number;
-  uid: number;
-  gid: number;
-  nlink: number;
-  dev: number;
-  rdev: number;
+  // not relevant, but present in Module.FS.stat result
+  atime?: number;
+  ctime?: number;
+  ino?: number;
+  uid?: number;
+  gid?: number;
+  nlink?: number;
+  dev?: number;
+  rdev?: number;
 }
 
 class MinetestDatabase extends Dexie {

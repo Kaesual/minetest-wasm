@@ -10,6 +10,8 @@ interface StartScreenProps {
   onStartGame: (options: GameOptions) => void;
   updateGameOptions: (options: Partial<GameOptions>) => void;
   currentOptions: GameOptions;
+  zipLoaderPromise: Promise<Uint8Array> | null;
+  setZipLoaderPromise: (promise: Promise<Uint8Array> | null) => void;
 }
 
 // Define form validation interfacesetJoinCode
@@ -19,8 +21,9 @@ interface FormValidation {
   gameSelection: boolean;
 }
 
-const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOptions, currentOptions }) => {
+const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOptions, currentOptions, zipLoaderPromise, setZipLoaderPromise }) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingZip, setIsLoadingZip] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState<string>(currentOptions.language);
   const [selectedProxy, _setSelectedProxy] = useState<number>(parseInt(localStorage.getItem('luanti_wasm_selected_proxy') || '0'));
   const [selectedStorage, setSelectedStorage] = useState<string>(currentOptions.storagePolicy);
@@ -31,6 +34,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
   const [joinCodeError, setJoinCodeError] = useState<string>('');
   const prefetchData = usePrefetchData();
   const minetestConsole = useMinetestConsole();
+  const storageManager = useStorageManager();
 
   const setSelectedProxy = (index: number) => {
     _setSelectedProxy(index);
@@ -51,6 +55,20 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
       setIsPreloading(false);
     }
   }, [prefetchData.status]);
+
+  // Initialize the storage manager
+  useEffect(() => {
+    if (storageManager) {
+      storageManager.initialize({ policy: selectedStorage }, minetestConsole);
+    }
+  }, [storageManager, selectedStorage]);
+
+  // Keep the storage manager updated with the minetest console
+  useEffect(() => {
+    if (storageManager && minetestConsole) {
+      storageManager.setMinetestConsole(minetestConsole);
+    }
+  }, [storageManager, minetestConsole]);
 
   // Set default language based on browser locale
   useEffect(() => {
@@ -162,7 +180,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
     }
   };
 
-  const startGameDisabled = isLoading || isPreloading || (gameMode === 'join' && !!joinCodeError);
+  const startGameDisabled = isLoading || isPreloading || (gameMode === 'join' && !!joinCodeError) || isLoadingZip;
   const isStandalone = window.location.href.includes('standalone');
 
   return (
@@ -179,28 +197,24 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
       <div className="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm -z-10"></div>
       
       <div id="start_screen_left" className="flex flex-col justify-start p-5 overflow-y-auto rounded-xl text-lg bg-black bg-opacity-70 shadow-lg my-5 h-[calc(100vh-100px)] max-h-[calc(100vh-100px)] thin_scrollbar">
-        <div id="start_screen_left_caption" className="flex flex-row items-center gap-4 text-4xl font-bold mb-8">
+        <div id="start_screen_left_caption" className="flex flex-row items-center gap-4 text-4xl font-bold mb-6">
           <img src={`assets/minetest_logo.svg`} alt="Minetest Logo" className="w-20 h-20" />
           Luanti
         </div>
         
-        <p className="mb-4">
-          Welcome to the web version of Luanti (also known as Minetest), a free and open-source voxel game engine.
-        </p>
-
-        <p className="mb-4">
-          This is a experimental port of Minetest to the web using WebAssembly, allowing you to play
-          directly in your browser without installing anything. There are some important things to know,
-          so please read to the end of this screen.
+        <p>
+          Welcome to the experimental web version of Luanti (also known as Minetest), a free and open-source voxel game engine.
         </p>
 
         <p className="mt-4">
-          When you stop playing, always leave the world by opening the menu with ESC and selecting "Main menu". Then, wait several seconds before closing the Minetest plugin, to make sure your world saves are stored in your browser.
+          When you stop playing, always leave the world by opening the menu with ESC and selecting "Main menu".
+          Then, hover the settings icon in the top right corner of the game and select "Sync".
+          You can also download your worlds as zip file, and restore them later.
         </p>
 
-        <p className="mt-4">
+        {!isStandalone && <p className="mt-4">
           You can toggle the game into fullscreen mode in the CG Sidebar.
-        </p>
+        </p>}
         
         <p className="mt-4">
           Play responsibly and enjoy building in this blocky world!
@@ -208,42 +222,43 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
 
         {!isStandalone && <p className="mt-4 italic">
           Note: This Common Ground plugin is not affiliated with the Minetest project.
-          It started as a showcase of community gaming by one of the Common Ground
-          founders, and then went a bit beyond that.
+          It acts as a showcase for gaming on app.cg. If you want to get in touch, use
+          the community chat channels.
         </p>}
         {isStandalone && <p className="mt-4 italic">
           Note: This Luanti game client has been created by the Common Ground team. If 
           you enjoy the game and want to get in touch, join the 
-          (inofficial) <a href="https://app.cg/c/luanti" target="_blank" style={{textDecoration: 'underline', fontWeight: 'bold'}}>Luanti Community on app.cg</a>. You can 
+          inofficial <a href="https://app.cg/c/luanti" target="_blank" style={{textDecoration: 'underline', fontWeight: 'bold'}}>Luanti Community on app.cg</a>. You can 
           play the game there, too, and also chat, play and stream with other people.
         </p>}
 
-        <h2 className="text-2xl font-bold mt-4 mb-2">Controls</h2>
+        <h2 className="text-2xl font-bold mt-4 mb-2">New Features</h2>
         <ul className="ml-6 mb-4 list-disc">
-          <li className="mb-2">WASD - Movement</li>
-          <li className="mb-2">Space - Jump</li>
-          <li className="mb-2">Shift - Sneak</li>
-          <li className="mb-2">I - Inventory</li>
-          <li className="mb-2">Mouse - Look around</li>
-          <li className="mb-2">1-8 - Hotbar slots</li>
-          <li className="mb-2">N/B - Switch through hotbar slots</li>
-          <li className="mb-2">C - Switch camera mode</li>
-          <li className="mb-2">V - Switch minimap mode</li>
-          <li className="mb-2">T/ESC - Toggle ingame console</li>
-          <li className="mb-2">+/- - Change view distance</li>
-          <li className="mb-2">ESC - Menu</li>
+          <li>Persistent storage support with IndexedDB to save your worlds.</li>
+          <li>Back up to zip file, and restore from zip file.</li>
+          <li>Ingame settings overlay menu.</li>
+          <li>Console overlay menu.</li> 
+          <li>This loader frontend.</li>
         </ul>
 
-        <p className="mt-4 italic">
-          <b>Updates</b>
-          <ul className="simple-list">
-            <li>Added persistent storage support with IndexedDB to save your worlds.</li>
-            <li>Enhanced local storage management with statistics and cleanup tools.</li>
-          </ul>
-        </p>
+        <h2 className="text-2xl font-bold mt-4 mb-2">Controls</h2>
+        <ul className="ml-6 mb-4 list-disc">
+          <li>WASD - Movement</li>
+          <li>Space - Jump</li>
+          <li>Shift - Sneak</li>
+          <li>I - Inventory</li>
+          <li>Mouse - Look around</li>
+          <li>1-8 - Hotbar slots</li>
+          <li>N/B - Switch through hotbar slots</li>
+          <li>C - Switch camera mode</li>
+          <li>V - Switch minimap mode</li>
+          <li>T/ESC - Toggle ingame console</li>
+          <li>+/- - Change view distance</li>
+          <li>ESC - Menu</li>
+        </ul>
           
         <p className="mt-4 italic">
-          <b>A Tribute to the creators</b>
+          <b>A Tribute to the Creators</b>
           <ul className="simple-list-non-bulleted">
             <li>Thanks to the Minetest team for the great game engine!</li>
             <li>Thanks to paradust7 for the amazing WebAssembly port and the proxies!</li>
@@ -313,6 +328,56 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
               <option value="mineclone">Mineclone 0.116.1 (currently broken, some LUA error)</option>
               <option value="minetest_game">Minetest Game (only building, no mobs)</option>
             </select>
+          </div>
+
+          <div className="form_row mb-4">
+            <label className="block mb-2">Restore from zip file</label>
+            {!!zipLoaderPromise && <div>
+              <p className="text-yellow-500 my-1">⚠️ Your current worlds will be lost when you restore from zip!</p>
+            </div>}
+            <div className="flex flex-row gap-2">
+              <input
+                type="file"
+                accept=".zip"
+                disabled={isLoadingZip}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setIsLoadingZip(true);
+                    const promise = new Promise<Uint8Array>((resolve, reject) => {
+                      try {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                          const arrayBuffer = e.target?.result as ArrayBuffer;
+                          resolve(new Uint8Array(arrayBuffer));
+                        };
+                        reader.onerror = (e) => {
+                          reject(e);
+                        };
+                        reader.readAsArrayBuffer(file);
+                      } catch (e) {
+                        reject(e);
+                      }
+                    });
+                    setZipLoaderPromise(promise);
+                    promise.finally(() => {
+                      setIsLoadingZip(false);
+                    });
+                  }
+                }}
+              />
+              {!!zipLoaderPromise && <button
+                className="bg-blue-600 hover:bg-blue-700 text-white rounded p-1 px-3 text-sm"
+                onClick={(ev) => {
+                  setZipLoaderPromise(null);
+                  // Hacky: clear the file input field
+                  const input = ev.currentTarget.previousElementSibling as HTMLInputElement;
+                  if (input && input.files) {
+                    input.value = '';
+                  }
+                }}
+              >Clear selected file</button>}
+            </div>
           </div>
           
           {/* Display prefetching status */}
