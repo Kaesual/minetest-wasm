@@ -241,7 +241,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
           <li>This loader frontend.</li>
         </ul>
 
-        <h2 className="text-2xl font-bold mt-4 mb-2">Controls</h2>
+        <h2 className="text-2xl font-bold my-2">Controls</h2>
         <ul className="ml-6 mb-4 list-disc">
           <li>WASD - Movement</li>
           <li>Space - Jump</li>
@@ -271,7 +271,33 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
       
       <div id="start_screen_right" className="flex flex-col gap-5 p-5 rounded-xl overflow-y-auto thin_scrollbar h-[calc(100vh-100px)] max-h-[calc(100vh-100px)]">
         <div className="bg-black bg-opacity-50 text-white p-5 rounded-xl shadow-lg">
-          <h2 className="text-2xl font-bold mb-4">Launch Options</h2>
+          <button 
+            onClick={handleStartGame}
+            disabled={startGameDisabled}
+            className={`w-full px-4 py-8 mb-2 rounded-lg text-white text-2xl font-bold shadow-md transition transform hover:translate-y-[-2px] ${
+              startGameDisabled ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+          >
+            {isLoading || isPreloading ? 'Loading...' : 'Start Game'}
+          </button>
+
+          <div className="mb-4 text-xs text-gray-300 flex justify-between items-center">
+            <span className="text-sm">
+              {Object.entries(prefetchData.status).length === 0 ? 'preparing ' : 
+                Object.values(prefetchData.status).every(status => status === 'done') ? 
+                'all loaded ✓ ' : 'loading '}
+            </span>
+            <span className="text-sm flex flex-row gap-1">
+              {Object.entries(prefetchData.status).map(([file, status]) => (
+                <div key={file} className="text-xs flex gap-1">
+                  <span>{file.split('/').pop()}</span>
+                  <span>{typeof status === 'number' ? status > 100 ? `${Math.floor(status / 1000)}kB` : `${Math.floor(status * 100)}%` : status === 'done' ? '✓' : '❌'}</span>
+                </div>
+              ))}
+            </span>
+          </div>
+
+          <h2 className="text-2xl font-bold mb-2">Launch Options</h2>
           
           <div className="form-controls-row flex gap-5 mb-4">
             <div className="flex-1">
@@ -316,7 +342,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
           </div>
 
           <div className="form_row mb-4">
-            <label className="block mb-2">Select Game</label>
+            <label className="block mb-2">Select Game to pre-load</label>
             <select 
               className="w-full p-3 rounded-lg border-2 border-gray-300 bg-white text-black"
               value={selectedGameId}
@@ -324,7 +350,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
                 setSelectedGameId(ev.target.value as GameOptions['gameId']);
               }}
             >
-              <option value="mineclone2">VoxeLibre 0.90.1 (rich minecraft-like game)</option>
+              <option value="mineclone2">VoxeLibre 0.90.1 (rich minecraft-like game, recommended)</option>
               <option value="mineclone">Mineclone 0.116.1 (currently broken, some LUA error)</option>
               <option value="minetest_game">Minetest Game (only building, no mobs)</option>
             </select>
@@ -377,26 +403,6 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
                   }
                 }}
               >Clear selected file</button>}
-            </div>
-          </div>
-          
-          {/* Display prefetching status */}
-          <div className="mb-4 mt-2">
-            <div className="flex justify-between items-center">
-              <span>Game packs:</span>
-              <span className="text-sm">
-                {Object.entries(prefetchData.status).length === 0 ? 'Waiting to load' : 
-                 Object.values(prefetchData.status).every(status => status === 'done') ? 
-                 'All packs loaded ✓' : 'Loading...'}
-              </span>
-            </div>
-            <div className="mt-2">
-              {Object.entries(prefetchData.status).map(([file, status]) => (
-                <div key={file} className="text-xs flex justify-between">
-                  <span>{file.split('/').pop()}</span>
-                  <span>{typeof status === 'number' ? status > 100 ? `${Math.floor(status / 1000)}kB ⏳` : `${Math.floor(status * 100)}% ⏳` : status === 'done' ? '✓' : '❌'}</span>
-                </div>
-              ))}
             </div>
           </div>
           
@@ -498,16 +504,6 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
               </div>
             </div>
           )}
-          
-          <button 
-            onClick={handleStartGame}
-            disabled={startGameDisabled}
-            className={`w-full p-4 rounded-lg text-white font-bold shadow-md transition transform hover:translate-y-[-2px] ${
-              startGameDisabled ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
-            }`}
-          >
-            {isLoading || isPreloading ? 'Loading...' : 'Start Game'}
-          </button>
         </div>
       </div>
     </div>

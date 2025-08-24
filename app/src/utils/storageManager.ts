@@ -40,7 +40,7 @@ export class StorageManager {
   private readonly MODS_SYNC_BASE_PATH = '/minetest/mods';
 
   public autoSync: boolean = true;
-  public autoSyncDebounceDelay: number = 10_000;
+  public autoSyncDebounceDelay: number = 120_000;
 
   constructor() {
     // Empty constructor - initialization happens with initialize() 

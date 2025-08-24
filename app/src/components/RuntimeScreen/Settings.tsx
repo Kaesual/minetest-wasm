@@ -33,6 +33,7 @@ export function SettingsComponent({
   const [syncInProgress, setSyncInProgress] = useState<boolean>(false);
   const [downloadInProgress, setDownloadInProgress] = useState<boolean>(false);
   const [restartClicked, setRestartClicked] = useState<boolean>(false);
+  const [syncDelay, setSyncDelay] = useState<number>(Math.floor(storageManager.autoSyncDebounceDelay / 1000));
 
   useEffect(() => {
     const listener = (stats: StorageStats) => {
@@ -179,7 +180,7 @@ export function SettingsComponent({
               }
             }}
           >
-            {restartClicked ? '⚠️ Confirm force reload' : '⚠️ Force reload (will not sync!)'}
+            {restartClicked ? '⚠️ CONFIRM reload (will not sync worlds!)' : '⚠️ Force reload (will not sync worlds!)'}
           </button>
         </div>
       </div>
@@ -213,7 +214,27 @@ export function SettingsComponent({
               {formattedStats}
             </span>
           </div>
-          
+
+          <div className="flex items-center">
+            <p className="text-gray-300 text-sm">
+              Sync delay (10-300s) {Math.floor(storageManager.autoSyncDebounceDelay / 1000)}s
+            </p>
+          </div>
+          <div>
+            <input
+              type="range"
+              min={10}
+              max={300}
+              step={1}
+              className="bg-gray-700 text-white rounded p-1 w-full"
+              value={syncDelay}
+              onChange={(e) => {
+                storageManager.autoSyncDebounceDelay = parseInt(e.target.value) * 1000;
+                setSyncDelay(parseInt(e.target.value));
+              }}
+            />
+          </div>
+
           <div>
             <button
               className="bg-blue-600 hover:bg-blue-700 text-white rounded p-1 px-3 text-sm w-full h-full"
@@ -231,6 +252,13 @@ export function SettingsComponent({
             >
               Sync &amp; Download
             </button>
+          </div>
+        </>}
+        {gameOptions.storagePolicy === 'no-storage' && <>
+          <div className="col-span-2 text-center">
+            <span className="text-gray-300 text-sm">
+              Storage is disabled.
+            </span>
           </div>
         </>}
       </div>
