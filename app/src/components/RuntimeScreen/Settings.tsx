@@ -115,8 +115,8 @@ export function SettingsComponent({
       items.push(`The host server port is: 30000`);
     }
     if (gameOptions.mode === 'host' || gameOptions.mode === 'local') {
-      items.push(`To save your game, always press ESC and go back to the main menu`);
-      items.push(`There, wait a few seconds before closing the game, otherwise your game might be lost or corrupted`);
+      items.push(`To preserve your local game, always press ESC and go back to the main menu`);
+      items.push(`There, open this menu again and click Sync Now, or Sync & Download`);
     }
     return items;
   }, [gameOptions.mode, vpnClientCode]);
@@ -252,6 +252,9 @@ export function SettingsComponent({
             >
               Sync &amp; Download
             </button>
+          </div>
+          <div className="col-span-2 text-xs text-gray-300">
+            It's recommended to <b>Sync &amp; Download</b> while in the Main Menu to avoid file corruption!
           </div>
         </>}
         {gameOptions.storagePolicy === 'no-storage' && <>

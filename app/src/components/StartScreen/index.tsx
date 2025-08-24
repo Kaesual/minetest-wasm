@@ -357,9 +357,12 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
           </div>
 
           <div className="form_row mb-4">
-            <label className="block mb-2">Restore from zip file</label>
+            <label className="block mb-2">Restore worlds from zip file</label>
             {!!zipLoaderPromise && <div>
-              <p className="text-yellow-500 my-1">⚠️ Your current worlds will be lost when you restore from zip!</p>
+              <p className="text-yellow-500 mb-2">
+                ⚠️ The zip file will be applied when you start the game.
+                Your current worlds will be LOST!
+              </p>
             </div>}
             <div className="flex flex-row gap-2">
               <input
