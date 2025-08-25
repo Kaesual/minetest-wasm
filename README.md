@@ -6,29 +6,31 @@ This is an experimental port of Minetest to the web using emscripten/WebAssembly
 The original repository was made by paradust7. This fork has done some work on save game persistence through 
 indexeddb storage, and has been created as a proof of concept for embedding a minecraft-like game into 
 the social platform Common Ground ([app.cg](https://app.cg), [commonground.cg](https://commonground.cg)) as an in-community plugin, to enable full p2p gameplay. 
-The server is hosted in the browser, with persistent save games in indexeddb.
+The game server can be hosted in the browser, with persistent save games in indexeddb, zip file backup and restore, and more.
 
 There's an inofficial [Luanti Community](https://app.cg/c/luanti) there, where the game can be played, and development and 
-roadmap can be discussed.
+roadmap of this repository can be discussed.
 
 ![Screenshot of Luanti running in app.cg](assets/screenshot.jpg)
 
 
 ### Status of this repository
 
-This build does not use the latest version of Luanti, and not much has been updated in the web assembly 
-build pipeline. Anyone who is interested in working on this together is very welcome.
+This build does not use the latest version of Luanti (5.9 vs 5.13), and not much has been updated in the web assembly 
+build pipeline. Anyone who is interested in working on this together is very welcome. Update: paradust has recently started
+to work on updating to the latest Luanti version.
 
 Disclosure: I'm also one of the founders of the Common Ground project, which is [on github](https://github.com/Common-Ground-DAO) too.
 
-List of meaningful changes (updated 2025-08-25):
+List of features (updated 2025-08-25):
 - Replaced the original html loader with a modern React based loader. This allows easy integration and customization of Luanti Web into existing websites.
-- Loader has many configuration options and comes with pre-loaded game packs.
+- Loader has many configuration options and comes with pre-loaded game packs to choose from. (screenshots at the bottom).
+  - Luanti can also access contentDb and online play (made possible by paradust).
 - In-browser storage backend for world save and config files. This allows save games to be stored persistently in the browser across reloads.
 - With this indexedDb storage backend, the Luanti web client can be embedded and run in cross-origin iframes. This is convenient, as it allows better integration in existing web projects.
 - Added Backup and Restore function for all Worlds saved in the browser. They can now be saved and restored as local zip files.
 - Added an Ingame Settings overlay (hoverable cogwheel in top right corner), where synchronization, backups and some other settings can be managed.
-- The original repo only comes with minetest_game, which is a bit underwhelming. Since I wanted to showcase a cool game integration, I switched that for VoxeLibre which now comes pre-loaded as the default game. I just updated it to the most recent version, too (0.90.1 as of today).
+- The original repo only comes with minetest_game, which is a bit underwhelming. Since I wanted to showcase a cool game integration, I switched that for VoxeLibre which now comes pre-loaded as the default game. I just updated it to the most recent version, too (0.90.1 as of today). Also added Mineclonia (0.116.1) but it currently fails with a LUA error.
 
 Update 2025-08-10:
 - I've connected with paradust, the maintainer of the repository this one has been forked from
