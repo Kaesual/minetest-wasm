@@ -15,3 +15,4 @@ sources/minetest_game
 emsdk/
 app/node_modules/
 app/build/
+nginx/logs/

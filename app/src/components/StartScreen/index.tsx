@@ -351,7 +351,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
               }}
             >
               <option value="mineclone2">VoxeLibre 0.90.1 (rich minecraft-like game, recommended)</option>
-              <option value="mineclone">Mineclone 0.116.1 (currently broken, some LUA error)</option>
+              <option value="mineclone">Mineclonia 0.116.1 (currently broken, some LUA error)</option>
               <option value="minetest_game">Minetest Game (only building, no mobs)</option>
             </select>
           </div>
