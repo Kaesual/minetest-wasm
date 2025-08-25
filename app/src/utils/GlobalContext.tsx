@@ -13,12 +13,14 @@ export interface PrefetchStatus {
     minetest_game: Uint8Array | null;
     voxelibre: Uint8Array | null;
     mineclone: Uint8Array | null;
+    glitch: Uint8Array | null;
   };
   status: {
     base: number | 'done' | 'error';
     minetest_game: number | 'done' | 'error';
     voxelibre: number | 'done' | 'error';
     mineclone: number | 'done' | 'error';
+    glitch: number | 'done' | 'error';
   };
 }
 
@@ -34,12 +36,14 @@ const initialPrefetchStatus: PrefetchStatus = {
     minetest_game: null,
     voxelibre: null,
     mineclone: null,
+    glitch: null,
   },
   status: {
     base: 0,
     minetest_game: 0,
     voxelibre: 0,
     mineclone: 0,
+    glitch: 0,
   }
 };
 
@@ -103,7 +107,7 @@ export const GlobalProvider: React.FC<{children: React.ReactNode}> = ({ children
     messages
   }), [consolePrint, consolePrintErr, messages]);
     
-  const prefetch = useCallback(async (name: 'base' | 'minetest_game' | 'voxelibre' | 'mineclone') => {
+  const prefetch = useCallback(async (name: 'base' | 'minetest_game' | 'voxelibre' | 'mineclone' | 'glitch') => {
     const packUrl = `minetest/packs/${name}.pack`;
     try {
       console.log(`Prefetching pack: ${packUrl}`);
@@ -187,6 +191,7 @@ export const GlobalProvider: React.FC<{children: React.ReactNode}> = ({ children
     prefetch('minetest_game');
     prefetch('voxelibre');
     prefetch('mineclone');
+    prefetch('glitch');
   }, []);
   
   // Create the instance if it doesn't exist

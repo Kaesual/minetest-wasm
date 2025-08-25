@@ -30,7 +30,7 @@ List of features (updated 2025-08-25):
 - With this indexedDb storage backend, the Luanti web client can be embedded and run in cross-origin iframes. This is convenient, as it allows better integration in existing web projects.
 - Added Backup and Restore function for all Worlds saved in the browser. They can now be saved and restored as local zip files.
 - Added an Ingame Settings overlay (hoverable cogwheel in top right corner), where synchronization, backups and some other settings can be managed.
-- The original repo only comes with minetest_game, which is a bit underwhelming. Since I wanted to showcase a cool game integration, I switched that for VoxeLibre which now comes pre-loaded as the default game. I just updated it to the most recent version, too (0.90.1 as of today). Also added Mineclonia (0.116.1) but it currently fails with a LUA error.
+- The original repo only comes with minetest_game, which is a bit underwhelming. Since I wanted to showcase a cool game integration, I switched that for VoxeLibre which now comes pre-loaded as the default game. I just updated it to the most recent version, too (0.90.1 as of today). Also added Mineclonia (0.116.1) but it currently fails with a LUA error. Added Glitch (1.3.2), which seems to work.
 
 Update 2025-08-10:
 - I've connected with paradust, the maintainer of the repository this one has been forked from

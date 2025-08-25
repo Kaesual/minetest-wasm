@@ -35,6 +35,9 @@ getrepo voxelibre "https://git.minetest.land/VoxeLibre/VoxeLibre.git" 0cf15c6e23
 # Mineclone Game
 getrepo mineclone "https://codeberg.org/mineclonia/mineclonia.git" 49251c8fbdab63a115a2b8709e95732f5cdd87d3
 
+# Glitch Game
+getrepo glitch "https://codeberg.org/Wuzzy/Glitch.git" f82ce14298dd060813627eff35a4cd8b178b4e95
+
 # These repos are part of the fork
 getrepo webshims "https://github.com/paradust7/webshims.git" 91c3fe85d2cb7f85cc8e19d3f53dc8f252a69ff7
 getrepo minetest "https://github.com/paradust7/minetest.git" 943e0e9f99245aaf61a3e3967d53f807c70492e6

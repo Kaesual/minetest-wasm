@@ -179,6 +179,9 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       else if (gameOptions.gameId === 'minetest_game') {
         await packManager.addPack('minetest_game', prefetchData.result.minetest_game!);
       }
+      else if (gameOptions.gameId === 'glitch') {
+        await packManager.addPack('glitch', prefetchData.result.glitch!);
+      }
 
       // Set canvas size
       if (canvasRef.current) fixGeometry();

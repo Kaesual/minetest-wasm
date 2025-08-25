@@ -56,13 +56,11 @@ cp -a "$SOURCES_DIR"/minetest_game games
 cd games/minetest_game
 rm -rf ".git" ".github"
 popd
-
 # Make minetest_game_fsroot.tar
 rm -f minetest_game_fsroot.tar
 pushd minetest_game_fsroot
 tar cf ../minetest_game_fsroot.tar .
 popd
-
 # Compress with ZSTD
 rm -f minetest_game_fsroot.tar.zst
 zstd --ultra -22 minetest_game_fsroot.tar
@@ -99,3 +97,19 @@ popd
 # Compress with ZSTD
 rm -f mineclone_fsroot.tar.zst
 zstd --ultra -22 mineclone_fsroot.tar
+
+# Make glitch_game_fsroot.tar
+mkdir -p glitch_fsroot/minetest/games
+pushd glitch_fsroot/minetest
+cp -a "$SOURCES_DIR"/glitch games
+cd games/glitch
+rm -rf ".git" ".github"
+popd
+# Make glitch_fsroot.tar
+rm -f glitch_fsroot.tar
+pushd glitch_fsroot
+tar cf ../glitch_fsroot.tar .
+popd
+# Compress with ZSTD
+rm -f glitch_fsroot.tar.zst
+zstd --ultra -22 glitch_fsroot.tar

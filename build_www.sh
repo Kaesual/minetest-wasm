@@ -48,6 +48,9 @@ cp -p "$BUILD_DIR/voxelibre_fsroot.tar.zst" "$PACKS_DIR/voxelibre.pack"
 # Copy mineclone_game pack
 cp -p "$BUILD_DIR/mineclone_fsroot.tar.zst" "$PACKS_DIR/mineclone.pack"
 
+# Copy glitch_game pack
+cp -p "$BUILD_DIR/glitch_fsroot.tar.zst" "$PACKS_DIR/glitch.pack"
+
 echo "DONE"
 
 # Optional script to customize deployment
