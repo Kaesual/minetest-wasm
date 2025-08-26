@@ -470,7 +470,7 @@ export class StorageManager {
     }
     console.log('StorageManager: Restoring from zip');
     const unzipped = await new Promise<Unzipped>((resolve, reject) => {
-      unzip(
+      const terminate = unzip(
         zipFile,
         {},
         (err, data) => {
@@ -487,12 +487,23 @@ export class StorageManager {
     this.fileStats.clear();
     const addedDirectories: Set<string> = new Set();
     const now = Math.floor(Date.now() / 1000);
-    for (const file of Object.keys(unzipped)) {
-      if (!file.startsWith('/minetest/')) {
-        console.error('StorageManager: File does not start with /minetest/', file);
+    console.log("UNZIPPED", unzipped);
+    for (let file of Object.keys(unzipped)) {
+      if (file.endsWith('/')) {
+        console.log("Skipping directory", file);
         continue;
       }
-      const relativePath = file.slice('/minetest/'.length);
+      let relativePath: string;
+      if (file.startsWith('/minetest/')) {
+        relativePath = file.slice('/minetest/'.length);
+      }
+      else if (file.startsWith('minetest/')) {
+        relativePath = file.slice('minetest/'.length);
+      }
+      else {
+        this.minetestConsole.printErr('StorageManager: File does not start with /minetest/ or minetest/: ' + file);
+        continue;
+      }
       console.log("Restoring file", file);
       const pathFragments = relativePath.split('/');
       for (let i = 1; i < pathFragments.length; i++) {
@@ -501,6 +512,10 @@ export class StorageManager {
           await this.idbManager.storeDirectory(dirPath);
           addedDirectories.add(dirPath);
         }
+      }
+      if (!unzipped[file]) {
+        this.minetestConsole.printErr('StorageManager: File not found in zip: ' + file);
+        continue;
       }
       const stats: FileStats = {
         mtime: now,

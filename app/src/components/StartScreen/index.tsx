@@ -382,6 +382,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
                           resolve(new Uint8Array(arrayBuffer));
                         };
                         reader.onerror = (e) => {
+                          minetestConsole.printErr(`Error reading zip file: ${reader.error?.message}`);
                           reject(e);
                         };
                         reader.readAsArrayBuffer(file);
