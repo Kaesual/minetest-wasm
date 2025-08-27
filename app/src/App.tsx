@@ -13,7 +13,7 @@ export interface GameOptions {
   storagePolicy: string;
   minetestArgs: MinetestArgs;
   mode: 'local' | 'host' | 'join';
-  gameId: 'minetest_game' | 'mineclone' | 'mineclone2' | 'glitch';
+  gameId: 'minetest_game' | 'mineclonia' | 'mineclone2' | 'glitch';
   playerName?: string;
   joinCode?: string;
   worldName?: string;

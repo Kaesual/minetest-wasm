@@ -82,21 +82,21 @@ popd
 rm -f voxelibre_fsroot.tar.zst
 zstd --ultra -22 voxelibre_fsroot.tar
 
-# Make mineclone_game_fsroot.tar
-mkdir -p mineclone_fsroot/minetest/games
-pushd mineclone_fsroot/minetest
-cp -a "$SOURCES_DIR"/mineclone games
-cd games/mineclone
+# Make mineclonia_game_fsroot.tar
+mkdir -p mineclonia_fsroot/minetest/games
+pushd mineclonia_fsroot/minetest
+cp -a "$SOURCES_DIR"/mineclonia games
+cd games/mineclonia
 rm -rf ".git" ".github"
 popd
-# Make mineclone_fsroot.tar
-rm -f mineclone_fsroot.tar
-pushd mineclone_fsroot
-tar cf ../mineclone_fsroot.tar .
+# Make mineclonia_fsroot.tar
+rm -f mineclonia_fsroot.tar
+pushd mineclonia_fsroot
+tar cf ../mineclonia_fsroot.tar .
 popd
 # Compress with ZSTD
-rm -f mineclone_fsroot.tar.zst
-zstd --ultra -22 mineclone_fsroot.tar
+rm -f mineclonia_fsroot.tar.zst
+zstd --ultra -22 mineclonia_fsroot.tar
 
 # Make glitch_game_fsroot.tar
 mkdir -p glitch_fsroot/minetest/games

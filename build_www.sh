@@ -45,8 +45,8 @@ cp -p "$BUILD_DIR/minetest_game_fsroot.tar.zst" "$PACKS_DIR/minetest_game.pack"
 # Copy voxelibre_game pack
 cp -p "$BUILD_DIR/voxelibre_fsroot.tar.zst" "$PACKS_DIR/voxelibre.pack"
 
-# Copy mineclone_game pack
-cp -p "$BUILD_DIR/mineclone_fsroot.tar.zst" "$PACKS_DIR/mineclone.pack"
+# Copy mineclonia_game pack
+cp -p "$BUILD_DIR/mineclonia_fsroot.tar.zst" "$PACKS_DIR/mineclonia.pack"
 
 # Copy glitch_game pack
 cp -p "$BUILD_DIR/glitch_fsroot.tar.zst" "$PACKS_DIR/glitch.pack"

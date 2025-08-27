@@ -173,8 +173,8 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       if (gameOptions.gameId === 'mineclone2') {
         await packManager.addPack('voxelibre', prefetchData.result.voxelibre!);
       }
-      else if (gameOptions.gameId === 'mineclone') {
-        await packManager.addPack('mineclone', prefetchData.result.mineclone!);
+      else if (gameOptions.gameId === 'mineclonia') {
+        await packManager.addPack('mineclonia', prefetchData.result.mineclonia!);
       }
       else if (gameOptions.gameId === 'minetest_game') {
         await packManager.addPack('minetest_game', prefetchData.result.minetest_game!);

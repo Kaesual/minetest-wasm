@@ -33,7 +33,7 @@ getrepo minetest_game "https://github.com/minetest/minetest_game.git" a3b171e317
 getrepo voxelibre "https://git.minetest.land/VoxeLibre/VoxeLibre.git" 0cf15c6e2366ebb0766fcfa0a91285c6b7f6b1ed
 
 # Mineclone Game
-getrepo mineclone "https://codeberg.org/mineclonia/mineclonia.git" 49251c8fbdab63a115a2b8709e95732f5cdd87d3
+getrepo mineclonia "https://codeberg.org/mineclonia/mineclonia.git" 49251c8fbdab63a115a2b8709e95732f5cdd87d3
 
 # Glitch Game
 getrepo glitch "https://codeberg.org/Wuzzy/Glitch.git" f82ce14298dd060813627eff35a4cd8b178b4e95
