@@ -228,7 +228,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
         {isStandalone && <p className="mt-4 italic">
           Note: This Luanti game client has been created by the Common Ground team. If 
           you enjoy the game and want to get in touch, join the 
-          inofficial <a href="https://app.cg/c/luanti" target="_blank" style={{textDecoration: 'underline', fontWeight: 'bold'}}>Luanti Community on app.cg</a>. You can 
+          official <a href="https://app.cg/c/videogames" target="_blank" style={{textDecoration: 'underline', fontWeight: 'bold'}}>Video Games Community on app.cg</a>. You can 
           play the game there, too, and also chat, play and stream with other people.
         </p>}
 

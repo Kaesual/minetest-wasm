@@ -8,8 +8,7 @@ indexeddb storage, and has been created as a proof of concept for embedding a mi
 the social platform Common Ground ([app.cg](https://app.cg), [commonground.cg](https://commonground.cg)) as an in-community plugin, to enable full p2p gameplay. 
 The game server can be hosted in the browser, with persistent save games in indexeddb, zip file backup and restore, and more.
 
-There's an inofficial [Luanti Community](https://app.cg/c/luanti) there, where the game can be played, and development and 
-roadmap of this repository can be discussed.
+There's the official [Video Games Community](https://app.cg/c/videogames) there, where the game can be played, and development and roadmap of this repository can be discussed.
 
 ![Screenshot of Luanti running in app.cg](assets/screenshot.jpg)
 
@@ -35,7 +34,7 @@ List of features (updated 2025-08-25):
 Update 2025-08-10:
 - I've connected with paradust, the maintainer of the repository this one has been forked from
 - There's a [Discord community](https://discord.gg/APmB9j2M) for Luanti WASM now, for development related discussions, feedback, feature requests etc.
-- You're still invited to join the inofficial [Luanti community on app.cg](https://app.cg/c/luanti) if you want to get in touch
+- You're still invited to join the official [Video Games community on app.cg](https://app.cg/c/videogames) if you want to get in touch
 - I will try to upstream my storage changes to the original repository
 - At the same time, I consider making an app.cg-specific branch that connects the Luanti client with CG's user and community model, to enable a customized, community-integrated gameplay experience
 
