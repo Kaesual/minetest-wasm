@@ -1,27 +1,31 @@
-Minetest-wasm
-=============
+<p align="center">
+    <img src="assets/screenshot.jpg" alt="Luanti on app.cg Cover Image">
+</p>
 
-This is an experimental port of Minetest to the web using emscripten/WebAssembly.
+## What is Luanti / minetest-wasm?
 
-The original repository was made by paradust7. This fork has done some work on save game persistence through 
-indexeddb storage, and has been created as a proof of concept for embedding a minecraft-like game into 
-the social platform Common Ground ([app.cg](https://app.cg), [commonground.cg](https://commonground.cg)) as an in-community plugin, to enable full p2p gameplay. 
-The game server can be hosted in the browser, with persistent save games in indexeddb, zip file backup and restore, and more.
+This is a fork of the [original minetest-wasm repository](https://github.com/paradust7/minetest-wasm) made by paradust7. It has been made with the goal to embed Luanti as an in-community game experience into the Common Ground platform. I want to enable a Minecraft-like experience, and I'm planning to add additional features like community servers - stay tuned! 🚀
 
-There's the official [Video Games Community](https://app.cg/c/videogames) there, where the game can be played, and development and roadmap of this repository can be discussed.
-
-![Screenshot of Luanti running in app.cg](assets/screenshot.jpg)
+Luanti itself is an Open Source Voxel Game Engine that has many games readily available. There's the Luanti contentDb where you can find all kinds of games, mods and such. This build also includes VoxeLibre (a Minecraft-like game), Glitch (a single player adventure), Mineclonia (also Minecraft-like, but currently not working) and Minetest Game, a very basic, Minecraft-like game. 
 
 
-### Status of this repository
+## The Common Games Collection
 
-This build does not use the latest version of Luanti (5.9 vs 5.13), and not much has been updated in the web assembly 
-build pipeline. Anyone who is interested in working on this together is very welcome. Update: paradust has recently started
-to work on updating to the latest Luanti version.
+This repository is part of a broader effort to build a collection of Open Source games, which I call the [Common Games Collection](https://github.com/Kaesual/common-games-collection). Many such games exist, but are often cumbersome to build and thereby restricted to experts. I'm trying to build a unified collection, and make sure that all the games
 
-Disclosure: I'm also one of the founders of the Common Ground project, which is [on github](https://github.com/Common-Ground-DAO) too.
+- have a proper dockerized build pipeline (simple to run on any OS)
+- can generate docker images ready for self hosting
+- can easily be hosted on any path behind a reverse nginx proxy (for https support and structure)
+- can be run in iframes, since this is required for my use case
 
-List of features (updated 2025-08-25):
+My idea is that as a collective, we can build a collection of great games where the community can *focus on modifying the games*, and knowledge about the (sometimes delicate) process of *converting a game to web assembly* can be shared, too. This way, it becomes easier to add more games over time.
+
+
+## Updates in this fork
+
+This build does not use the latest version of Luanti (5.9 vs 5.13), and not much has been updated in the web assembly build pipeline since 5.9 yet. Anyone who is interested in working on this together is very welcome. Paradust7 has recently started to work on updating to the latest Luanti version.
+
+List of features:
 - Replaced the original html loader with a modern React based loader. This allows easy integration and customization of Luanti Web into existing websites.
 - Loader has many configuration options and comes with pre-loaded game packs to choose from. (screenshots at the bottom).
   - Luanti can also access contentDb and online play (made possible by paradust).
@@ -31,16 +35,14 @@ List of features (updated 2025-08-25):
 - Added an Ingame Settings overlay (hoverable cogwheel in top right corner), where synchronization, backups and some other settings can be managed.
 - The original repo only comes with minetest_game, which is a bit underwhelming. Since I wanted to showcase a cool game integration, I switched that for VoxeLibre which now comes pre-loaded as the default game. I just updated it to the most recent version, too (0.90.1 as of today). Also added Mineclonia (0.116.1) but it currently fails with a LUA error. Added Glitch (1.3.2), which seems to work.
 
-Update 2025-08-10:
-- I've connected with paradust, the maintainer of the repository this one has been forked from
-- There's a [Discord community](https://discord.gg/APmB9j2M) for Luanti WASM now, for development related discussions, feedback, feature requests etc.
-- You're still invited to join the official [Video Games community on app.cg](https://app.cg/c/videogames) if you want to get in touch
-- I will try to upstream my storage changes to the original repository
-- At the same time, I consider making an app.cg-specific branch that connects the Luanti client with CG's user and community model, to enable a customized, community-integrated gameplay experience
+*Updates August 2025*
 
-Update 2025-08-25:
+- I've connected with paradust, the maintainer of the repository this one has been forked from
 - paradust has done some recent work on their repository. I created the branch `wip/merge_upstream` where I merge those changes, but as of today,
-the Luanti version is still the same, so there's no benefit in switching yet. The update process is expected to take a while.
+the Luanti version is still the same, so there's no benefit in switching yet. The update process is expected to take a while
+- There's a [Discord community](https://discord.gg/APmB9j2M) specifically for Luanti WASM now, for development related discussions, feedback, feature requests etc.
+- You're still invited to join the official [Common Games community on app.cg](https://app.cg/c/commongames) if you want to get in touch
+- I consider making an app.cg-specific branch that connects the Luanti client with app.cg's user and community model, to enable a customized, community-integrated gameplay experience
 
 
 ### Local Development and Deployment
@@ -104,6 +106,29 @@ If you want to run Luanti Web on a standalone domain, you need the following hea
 - Cross-Origin-Opener-Policy same-origin
 - Cross-Origin-Resource-Policy same-origin
 
+## Network play
+
+This repository still uses the original proxy setup by paradust7, but I intend to also spin up some game servers and proxies for the Common Games collection. The setup allows real p2p play - host a game in your browser, share a code with your friends, and they can join you.
+
+By default, the proxy server is set to `wss://minetest.dustlabs.io/proxy` (see static/launcher.js).
+This is necessary for network play, since websites cannot open normal TCP/UDP sockets. This proxy
+is located in California. There are regional proxies which may perform better depending on your
+location:
+
+North America (Dallas) - wss://na1.dustlabs.io/mtproxy
+South America (Sao Paulo) - wss://sa1.dustlabs.io/mtproxy
+Europe (Frankfurt) - wss://eu1.dustlabs.io/mtproxy
+Asia (Singapore) - wss://ap1.dustlabs.io/mtproxy
+Australia (Melbourne) - wss://ap2.dustlabs.io/mtproxy
+
+You could also roll your own own custom proxy server. The client code is here:
+
+https://github.com/paradust7/webshims/blob/main/src/emsocket/proxy.js
+
+Paradust7 also made a sample proxy server repository here:
+
+https://github.com/paradust7/minetest-wasm-sample-proxy
+
 
 ### Update history
 
@@ -134,56 +159,3 @@ If you want to run Luanti Web on a standalone domain, you need the following hea
 ![Ingame Menu Toggle](assets/ingame_settings_cog.jpg)
 
 ![Ingame Menu](assets/ingame_menu.jpg)
-
-=============
-
-Original README
--------------------
-
-The original README is partially deprecated, use with caution.
-
-System Requirements
--------------------
-This has only been tested on Ubuntu 20.04.
-
-* Ubuntu: apt-get install -y build-essential cmake tclsh
-
-Building
----------
-
-    cd minetest-wasm
-    ./build_all.sh
-
-Installation
-------------
-
-If the build completes successfully, the www/ directory will contain the entire application. This 
-includes an `.htaccess` file which sets headers that are required (by browsers) to load the app. 
-If your webserver does not recognize `.htaccess` files, you may need to set the headers in
-another way.
-
-Network Play
-------------
-
-By default, the proxy server is set to `wss://minetest.dustlabs.io/proxy` (see static/launcher.js).
-This is necessary for network play, since websites cannot open normal TCP/UDP sockets. This proxy
-is located in California. There are regional proxies which may perform better depending on your
-location:
-
-North America (Dallas) - wss://na1.dustlabs.io/mtproxy
-South America (Sao Paulo) - wss://sa1.dustlabs.io/mtproxy
-Europe (Frankfurt) - wss://eu1.dustlabs.io/mtproxy
-Asia (Singapore) - wss://ap1.dustlabs.io/mtproxy
-Australia (Melbourne) - wss://ap2.dustlabs.io/mtproxy
-
-You could also roll your own own custom proxy server. The client code is here:
-
-https://github.com/paradust7/webshims/blob/main/src/emsocket/proxy.js
-
-Custom Emscripten
------------------
-The Emscripten SDK (emsdk) will be downloaded and installed the first time you build. To provide
-your own instead, set $EMSDK before building (e.g. using `emsdk_env.sh`). An external Emscripten
-may need to be patched by running this exactly once:
-
-    ./apply_patches.sh /path/to/emsdk
