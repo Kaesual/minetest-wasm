@@ -1,5 +1,5 @@
 import { GameOptions } from "../../App";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type StorageStats, type StorageManager } from "../../utils/storageManager";
 import React from "react";
 import { GAME_IDS, PROXIES } from "../../utils/common";
@@ -35,6 +35,16 @@ export function SettingsComponent({
   const [downloadInProgress, setDownloadInProgress] = useState<boolean>(false);
   const [restartClicked, setRestartClicked] = useState<boolean>(false);
   const [syncDelay, setSyncDelay] = useState<number>(Math.floor(storageManager.autoSyncDebounceDelay / 1000));
+  const [copySuccess, setCopySuccess] = useState<boolean>(false);
+  const copySuccessTimeout = useRef<any>(undefined);
+
+  // Used to prevent state updates after component unmount
+  const mountedRef = useRef<boolean>(true);
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const listener = (stats: StorageStats) => {
@@ -113,6 +123,34 @@ export function SettingsComponent({
     }
     return items;
   }, [gameOptions.mode]);
+
+  const copyToClipboard = useCallback(() => {
+    if (!vpnClientCode) {
+      return;
+    }
+    const proxyIndex = PROXIES.findIndex(p => p[0] === gameOptions.proxy);
+    if (proxyIndex === -1) {
+      navigator.clipboard.writeText("An error occurred while copying the join code, your proxy is not valid");
+      return;
+    }
+    const gameIdIndex = GAME_IDS.findIndex(g => g === gameOptions.gameId);
+    if (gameIdIndex === -1) {
+      navigator.clipboard.writeText("An error occurred while copying the join code, your game ID is not valid");
+      return;
+    }
+    navigator.clipboard.writeText(`${vpnClientCode}_${gameIdIndex}_${proxyIndex}`);
+    setCopySuccess(true);
+    if (copySuccessTimeout.current) {
+      clearTimeout(copySuccessTimeout.current);
+    }
+    copySuccessTimeout.current = setTimeout(() => {
+      if (!mountedRef.current) {
+        return;
+      }
+      copySuccessTimeout.current = undefined;
+      setCopySuccess(false);
+    }, 1000);
+  }, [gameOptions.proxy, gameOptions.gameId, vpnClientCode]);
   
   return (
     <div className="bg-gray-800 rounded-lg shadow-lg p-3 max-w-md animate-fadeIn">
@@ -186,25 +224,10 @@ export function SettingsComponent({
         <div className="w-full h-auto">
           <button
             className="bg-blue-600 hover:bg-blue-700 text-white rounded p-1 px-3 text-sm w-full h-full"
-            onClick={() => {
-              if (!vpnClientCode) {
-                return;
-              }
-              const proxyIndex = PROXIES.findIndex(p => p[0] === gameOptions.proxy);
-              if (proxyIndex === -1) {
-                navigator.clipboard.writeText("An error occurred while copying the join code, your proxy is not valid");
-                return;
-              }
-              const gameIdIndex = GAME_IDS.findIndex(g => g === gameOptions.gameId);
-              if (gameIdIndex === -1) {
-                navigator.clipboard.writeText("An error occurred while copying the join code, your game ID is not valid");
-                return;
-              }
-              navigator.clipboard.writeText(`${vpnClientCode}_${gameIdIndex}_${proxyIndex}`);
-            }}
+            onClick={copyToClipboard}
             disabled={!vpnClientCode}
           >
-            {!vpnClientCode ? 'Error: No code' : 'Copy to clipboard'}
+            {!vpnClientCode ? 'Error: No code' : copySuccess ? 'Copied!' : 'Copy to clipboard'}
           </button>
         </div>
       </>}
