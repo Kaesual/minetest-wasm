@@ -6,6 +6,8 @@ import './App.css';
 import MinetestArgs from './utils/MinetestArgs';
 import { PROXIES } from './utils/common';
 
+export type GameId = 'minetest_game' | 'mineclonia' | 'mineclone2' | 'glitch';
+
 // Define the game options interface
 export interface GameOptions {
   language: string;
@@ -13,8 +15,9 @@ export interface GameOptions {
   storagePolicy: string;
   minetestArgs: MinetestArgs;
   mode: 'local' | 'host' | 'join';
-  gameId: 'minetest_game' | 'mineclonia' | 'mineclone2' | 'glitch';
+  gameId: GameId;
   playerName?: string;
+  password?: string;
   joinCode?: string;
   worldName?: string;
 }

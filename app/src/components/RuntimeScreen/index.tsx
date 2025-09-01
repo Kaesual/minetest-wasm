@@ -242,20 +242,21 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       // NOTE: With --go the server seems to load too slowly for the client to connect,
       // at least for big games like voxelibre
 
-      // if (gameOptions.mode === 'join') {
-      //   minetestArgs.go = true;
-      //   minetestArgs.gameid = gameOptions.gameId;
-      //   minetestArgs.address = '172.16.0.1';
-      //   minetestArgs.port = 30000;
-      //   // playerName is guaranteed to exist here due to the check above
-      //   minetestArgs.name = gameOptions.playerName!;
-      // }
+      // Note: Share an object like {"gameId": "minetest_game", "clientCode": "..."} to the clients
+
+      if (gameOptions.mode === 'join') {
+        minetestArgs.go = true;
+        minetestArgs.gameid = gameOptions.gameId;
+        minetestArgs.address = '172.16.0.1';
+        minetestArgs.port = 30000;
+        minetestArgs.name = gameOptions.playerName || 'Player' + Math.random().toString(36).substring(2, 7);
+        minetestArgs.password = gameOptions.password || Math.random().toString(36).substring(2, 12);
+      }
       // else if (gameOptions.mode === 'host') {
       //   minetestArgs.go = true;
       //   minetestArgs.gameid = gameOptions.gameId;
       //   minetestArgs.address = '127.0.0.1';
       //   minetestArgs.port = 30000;
-      //   // playerName is guaranteed to exist here due to the check above
       //   minetestArgs.name = gameOptions.playerName!;
       //   minetestArgs.worldname = gameOptions.worldName!;
       //   minetestArgs.extra.push('--withserver');

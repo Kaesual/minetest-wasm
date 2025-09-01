@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useMinetestConsole, usePrefetchData, useStorageManager } from '../../utils/GlobalContext';
-import { type GameOptions } from '../../App';
+import { type GameId, type GameOptions } from '../../App';
 import { PROXIES, SUPPORTED_LANGUAGES } from '../../utils/common';
 
 // Define game modes
@@ -28,10 +28,14 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
   const [selectedProxy, _setSelectedProxy] = useState<number>(parseInt(localStorage.getItem('luanti_wasm_selected_proxy') || '0'));
   const [selectedStorage, setSelectedStorage] = useState<string>(currentOptions.storagePolicy);
   const [isPreloading, setIsPreloading] = useState(true);
-  const [selectedGameId, setSelectedGameId] = useState<GameOptions['gameId']>('mineclone2');
+  const [selectedGameId, setSelectedGameId] = useState<GameId>('mineclone2');
   const [gameMode, setGameMode] = useState<GameMode>('local');
+  const [joinCodeString, setJoinCodeString] = useState<string>('');
   const [joinCode, setJoinCode] = useState<string>('');
   const [joinCodeError, setJoinCodeError] = useState<string>('');
+  const [playerName, setPlayerName] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [joinProxy, setJoinProxy] = useState<number>(-1);
   const prefetchData = usePrefetchData();
   const minetestConsole = useMinetestConsole();
   const storageManager = useStorageManager();
@@ -165,7 +169,13 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
       };
       
       if (gameMode === 'join') {
+        if (!joinCode || !playerName || !password || joinProxy === -1) {
+          throw new Error('Join code, player name, password and proxy are required');
+        }
         gameOptions.joinCode = joinCode;
+        gameOptions.playerName = playerName;
+        gameOptions.password = password;
+        gameOptions.proxy = PROXIES[joinProxy][0];
       }
       
       console.log('Starting game with options:', gameOptions);
@@ -228,7 +238,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
         {isStandalone && <p className="mt-4 italic">
           Note: This Luanti game client has been created by the Common Ground team. If 
           you enjoy the game and want to get in touch, join the 
-          official <a href="https://app.cg/c/videogames" target="_blank" style={{textDecoration: 'underline', fontWeight: 'bold'}}>Video Games Community on app.cg</a>. You can 
+          official <a href="https://app.cg/c/commongames" target="_blank" style={{textDecoration: 'underline', fontWeight: 'bold'}}>Common Games Community on app.cg</a>. You can 
           play the game there, too, and also chat, play and stream with other people.
         </p>}
 
@@ -450,21 +460,20 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
 
           {gameMode === 'host' && (
             <div className="mb-5 p-4 border border-gray-300 rounded-lg">
-              <h3 className="text-xl mb-3">Host Game Mode</h3>
+              <h3 className="text-xl mb-3">Host Game Mode (read this!)</h3>
               
               <div className="mb-3">
                 This will run the game in hosting mode, and create a join code you can share with your friends.
                 <ul className="text-sm list-disc ml-4">
-                  <li>Click "Start Game"</li>
-                  <li>Select or create a world</li>
-                  <li>Toggle the "host server" checkbox, leave the port at 30000</li>
-                  <li>Choose a name and password for your own player</li>
-                  <li>Hover the settings icon in the top right corner of the game</li>
-                  <li>Copy the join code and share it with your friends</li>
-                  <li>Also tell your friends the proxy you're using, or it won't work</li>
-                  <li>Now start the game. Your friends can connect as soon as the world is loaded and running</li>
-                  <li>To make sure your savegames are stored, always leave the world by opening the menu with ESC and selecting "Main menu", and then wait several seconds when back in the main menu before closing the Minetest plugin</li>
-                  <li>Only share the join code with your friends, since the server will run on your own computer</li>
+                  <li>Click "Start Game" and select or create a world</li>
+                  <li>Enable the <b>host server</b> and <b>publish server</b> checkboxes, leave the port at 30000</li>
+                  <li>Choose a <b>name</b> and <b>password</b> for your own player, and start the game</li>
+                  <li><b>AFTER the game has loaded</b>, hover the settings icon in the top right corner of the game</li>
+                  <li>There, copy the join code and share it with your friends</li>
+                  <li>Do not leave the game browser tab for long while you're hosting, otherwise your players will encounter network errors</li>
+                  <li>Player names and passwords are <b>per-world</b>, so you'll have to remember them per-world</li>
+                  <li>Tip: Always use the same name and password, but don't use a sensitive one</li>
+                  <li>To make sure your savegames are saved correctly, always leave the world by opening the menu with ESC and selecting "Main menu". When you're back in the main menu, open the settings menu again and click "Sync Now" or "Sync & Download"</li>
                 </ul>
               </div>
             </div>
@@ -478,14 +487,9 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
                 This will run the game in joining mode, and allow you to connect to a game hosted by your friend.
                 <ul className="text-sm list-disc ml-4">
                   <li>Enter the join code you got from your friend</li>
-                  <li>Use the same proxy setting as your friend, or it won't work</li>
-                  <li>Click "Start Game"</li>
-                  <li>Once in the game, go to "Join Game". Enter 172.16.0.1 as the server address and leave 30000 as the port</li>
-                  <li>You can also see this server address in the settings menu, which you can open by hovering the settings icon in the top right corner</li>
-                  <li>If this is the first time joining your friend's world, you'll need to click "Register" and create a player name and password</li>
-                  <li>If you already have a player name and password in that world, enter them and click "Login"</li>
-                  <li>Tip: Use the same player name and password in all worlds, to make it easier to remember them. Don't use a password you use elsewhere</li>
-                  <li>Click "Join Game" and enjoy!</li>
+                  <li>Choose a player name and password for your own player, and click "Start Game"</li>
+                  <li>Player names and passwords are <b>per-world</b>, so you'll have to remember them per-world</li>
+                  <li>Tip: Always use the same name and password, but be aware that when you join someone else's world, they might have access to that password, so don't use a sensitive one</li>
                 </ul>
               </div>
 
@@ -494,18 +498,55 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
                 <input 
                   type="text" 
                   className="w-full p-3 rounded-lg border-2 border-gray-300 bg-white text-black"
-                  value={joinCode}
+                  value={joinCodeString}
                   onChange={(e) => {
-                    const code = e.target.value.trim();
-                    setJoinCode(code);
-                    if (!/^[A-F0-9]{12}$/.test(code)) {
-                      setJoinCodeError('Join code must be 12 digits (0-9, A-F)');
-                    } else {
-                      setJoinCodeError('');
+                    setJoinCodeString(e.target.value);
+                    const data = e.target.value.trim();
+                    try {
+                      const { gameId, code, proxy } = JSON.parse(data);
+                      if (!gameId || !['minetest_game', 'mineclonia', 'mineclone2', 'glitch'].includes(gameId)) {
+                        setJoinCodeError('Invalid game ID');
+                        return;
+                      }
+                      if (!code || typeof code !== 'string' || !/^[A-F0-9]{12}$/.test(code)) {
+                        setJoinCodeError('Invalid join code');
+                        return;
+                      }
+                      if (!proxy || typeof proxy !== 'number' || proxy < 0 || proxy >= PROXIES.length) {
+                        setJoinCodeError('Invalid proxy');
+                        return;
+                      }
+                      setSelectedGameId(gameId);
+                      setJoinCode(code);
+                      setJoinProxy(proxy);
+                    } catch (e) {
+                      setJoinCodeError('Join code must be JSON-parseable { gameId: string, code: string }');
                     }
                   }}
                 />
                 {joinCodeError && <p className="text-red-500 text-sm">{joinCodeError}</p>}
+              </div>
+              <div className="mb-3">
+                <label className="block mb-2">Player Name</label>
+                <input 
+                  type="text" 
+                  className="w-full p-3 rounded-lg border-2 border-gray-300 bg-white text-black"
+                  value={playerName}
+                  onChange={(e) => {
+                    setPlayerName(e.target.value);
+                  }}
+                />
+              </div>
+              <div className="mb-3">
+                <label className="block mb-2">Password</label>
+                <input 
+                  type="text" 
+                  className="w-full p-3 rounded-lg border-2 border-gray-300 bg-white text-black"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                  }}
+                />
               </div>
             </div>
           )}

@@ -1,7 +1,8 @@
 import { GameOptions } from "../../App";
-import { PROXIES } from "../../utils/common";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type StorageStats, type StorageManager } from "../../utils/storageManager";
+import React from "react";
+import { PROXIES } from "../../utils/common";
 
 interface SettingsProps {
   gameOptions: GameOptions;
@@ -105,21 +106,13 @@ export function SettingsComponent({
 
   // Help list items
   const helpListItems = useMemo(() => {
-    const items: string[] = ["You can see and change the keys in the menu by pressing ESC"];
-    if (gameOptions.mode === 'host' || gameOptions.mode === 'join') {
-      items.push(`The join code is: ${vpnClientCode}`);
-      items.push(`The proxy is: ${PROXIES.find(p => p[0] === gameOptions.proxy)?.[1]}`);
-    }
-    if (gameOptions.mode === 'join') {
-      items.push(`The host server address is: 172.16.0.1`);
-      items.push(`The host server port is: 30000`);
-    }
+    const items: (string | React.JSX.Element)[] = ["You can see and change the keys in the menu by pressing ESC"];
     if (gameOptions.mode === 'host' || gameOptions.mode === 'local') {
       items.push(`To preserve your local game, always press ESC and go back to the main menu`);
       items.push(`There, open this menu again and click Sync Now, or Sync & Download`);
     }
     return items;
-  }, [gameOptions.mode, vpnClientCode]);
+  }, [gameOptions.mode]);
   
   return (
     <div className="bg-gray-800 rounded-lg shadow-lg p-3 max-w-md animate-fadeIn">
@@ -184,6 +177,32 @@ export function SettingsComponent({
           </button>
         </div>
       </div>
+
+      {(gameOptions.mode === 'host' || gameOptions.mode === 'join') && <>
+        <div className="flex items-center justify-between my-2">
+          <h3 className="text-white font-semibold">Shareable Join Code</h3>
+        </div>
+
+        <div className="w-full h-auto">
+          <button
+            className="bg-blue-600 hover:bg-blue-700 text-white rounded p-1 px-3 text-sm w-full h-full"
+            onClick={() => {
+              if (!vpnClientCode) {
+                return;
+              }
+              const proxy = PROXIES.findIndex(p => p[0] === gameOptions.proxy);
+              if (proxy === -1) {
+                navigator.clipboard.writeText("An error occurred while copying the join code, your proxy is not valid");
+                return;
+              }
+              navigator.clipboard.writeText(JSON.stringify({ gameId: gameOptions.gameId, code: vpnClientCode, proxy }));
+            }}
+            disabled={!vpnClientCode}
+          >
+            {!vpnClientCode ? 'Error: No code' : 'Copy to clipboard'}
+          </button>
+        </div>
+      </>}
 
       <div className="flex items-center justify-between my-2">
         <h3 className="text-white font-semibold">Storage</h3>
