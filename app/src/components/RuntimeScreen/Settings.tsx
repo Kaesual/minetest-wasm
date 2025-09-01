@@ -2,7 +2,7 @@ import { GameOptions } from "../../App";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type StorageStats, type StorageManager } from "../../utils/storageManager";
 import React from "react";
-import { PROXIES } from "../../utils/common";
+import { GAME_IDS, PROXIES } from "../../utils/common";
 
 interface SettingsProps {
   gameOptions: GameOptions;
@@ -190,12 +190,17 @@ export function SettingsComponent({
               if (!vpnClientCode) {
                 return;
               }
-              const proxy = PROXIES.findIndex(p => p[0] === gameOptions.proxy);
-              if (proxy === -1) {
+              const proxyIndex = PROXIES.findIndex(p => p[0] === gameOptions.proxy);
+              if (proxyIndex === -1) {
                 navigator.clipboard.writeText("An error occurred while copying the join code, your proxy is not valid");
                 return;
               }
-              navigator.clipboard.writeText(JSON.stringify({ gameId: gameOptions.gameId, code: vpnClientCode, proxy }));
+              const gameIdIndex = GAME_IDS.findIndex(g => g === gameOptions.gameId);
+              if (gameIdIndex === -1) {
+                navigator.clipboard.writeText("An error occurred while copying the join code, your game ID is not valid");
+                return;
+              }
+              navigator.clipboard.writeText(`${vpnClientCode}_${gameIdIndex}_${proxyIndex}`);
             }}
             disabled={!vpnClientCode}
           >

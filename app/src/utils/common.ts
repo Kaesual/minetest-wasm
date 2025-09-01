@@ -1,3 +1,5 @@
+import { type GameId } from "../App";
+
 // Language options from the original launcher.js
 const SUPPORTED_LANGUAGES: [string, string][] = [
     ['be', "Беларуская [be]"],
@@ -63,4 +65,6 @@ const PROXIES: [string, string][] = [
     ["wss://ap2.dustlabs.io/mtproxy", "Australia"],
 ];
 
-export { SUPPORTED_LANGUAGES, PROXIES };
+const GAME_IDS: GameId[] = ['minetest_game', 'mineclonia', 'mineclone2', 'glitch'];
+
+export { SUPPORTED_LANGUAGES, PROXIES, GAME_IDS };

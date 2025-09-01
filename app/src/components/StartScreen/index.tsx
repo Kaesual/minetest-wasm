@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useMinetestConsole, usePrefetchData, useStorageManager } from '../../utils/GlobalContext';
 import { type GameId, type GameOptions } from '../../App';
-import { PROXIES, SUPPORTED_LANGUAGES } from '../../utils/common';
+import { GAME_IDS, PROXIES, SUPPORTED_LANGUAGES } from '../../utils/common';
 
 // Define game modes
 type GameMode = 'local' | 'host' | 'join';
@@ -35,7 +35,8 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
   const [joinCodeError, setJoinCodeError] = useState<string>('');
   const [playerName, setPlayerName] = useState<string>('');
   const [password, setPassword] = useState<string>('');
-  const [joinProxy, setJoinProxy] = useState<number>(-1);
+  const [joinProxyIndex, setJoinProxyIndex] = useState<number>(-1);
+  const [joinCodeStringValid, setJoinCodeStringValid] = useState<boolean>(false);
   const prefetchData = usePrefetchData();
   const minetestConsole = useMinetestConsole();
   const storageManager = useStorageManager();
@@ -169,13 +170,15 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
       };
       
       if (gameMode === 'join') {
-        if (!joinCode || !playerName || !password || joinProxy === -1) {
-          throw new Error('Join code, player name, password and proxy are required');
+        if (!joinCode || !playerName || joinProxyIndex === -1) {
+          throw new Error('Join code, player name and proxy are required');
         }
         gameOptions.joinCode = joinCode;
         gameOptions.playerName = playerName;
-        gameOptions.password = password;
-        gameOptions.proxy = PROXIES[joinProxy][0];
+        if (Boolean(password)) {
+          gameOptions.password = password;
+        }
+        gameOptions.proxy = PROXIES[joinProxyIndex][0];
       }
       
       console.log('Starting game with options:', gameOptions);
@@ -190,8 +193,81 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
     }
   };
 
-  const startGameDisabled = isLoading || isPreloading || (gameMode === 'join' && !!joinCodeError) || isLoadingZip;
+  const zipFileChangeHandler = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setIsLoadingZip(true);
+      const promise = new Promise<Uint8Array>((resolve, reject) => {
+        try {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const arrayBuffer = e.target?.result as ArrayBuffer;
+            resolve(new Uint8Array(arrayBuffer));
+          };
+          reader.onerror = (e) => {
+            minetestConsole.printErr(`Error reading zip file: ${reader.error?.message}`);
+            reject(e);
+          };
+          reader.readAsArrayBuffer(file);
+        } catch (e) {
+          reject(e);
+        }
+      });
+      setZipLoaderPromise(promise);
+      promise.finally(() => {
+        setIsLoadingZip(false);
+      });
+    }
+  }, [setZipLoaderPromise, minetestConsole]);
+
+  const joinCodeFieldChangeHandler = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setJoinCodeString(e.target.value);
+    let data = e.target.value.trim();
+    try {
+      if (!(/^[A-F0-9]{12}_[0-9]+_[0-9]+$/.test(data))) {
+        setJoinCodeError('Invalid join code');
+        return;
+      }
+      const [code, gameIdIndexString, proxyString] = data.split('_');
+      const gameIdIndex = parseInt(gameIdIndexString);
+      if (gameIdIndex < 0 || gameIdIndex >= GAME_IDS.length) {
+        setJoinCodeError('Invalid game ID');
+        return;
+      }
+      const proxyIndex = parseInt(proxyString);
+      if (!proxyIndex || typeof proxyIndex !== 'number' || proxyIndex < 0 || proxyIndex >= PROXIES.length) {
+        setJoinCodeError('Invalid proxy');
+        return;
+      }
+      setSelectedGameId(GAME_IDS[gameIdIndex]);
+      setJoinCode(code);
+      setJoinProxyIndex(proxyIndex);
+      setJoinCodeStringValid(true);
+    } catch (e) {
+      setJoinCodeError('Join code is invalid');
+      setJoinCodeStringValid(false);
+    }
+  }, []);
+
+  let startGameDisabled = isLoading || isPreloading || (gameMode === 'join' && !!joinCodeError) || isLoadingZip;
+  if (gameMode === 'join' && (!playerName || joinProxyIndex === -1 || !joinCode || !joinCodeString || !joinCodeStringValid)) {
+    startGameDisabled = true;
+  }
   const isStandalone = window.location.href.includes('standalone');
+
+  const smallStartGameButton = (
+    <div className="text-center">
+      <button 
+        onClick={handleStartGame}
+        disabled={startGameDisabled}
+        className={`w-full px-4 py-2 mt-2 rounded-lg text-white font-bold shadow-md transition transform hover:translate-y-[-2px] ${
+          startGameDisabled ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+        }`}
+      >
+        {isLoading || isPreloading ? 'Loading...' : 'Start Game'}
+      </button>
+    </div>
+  );
 
   return (
     <div 
@@ -380,32 +456,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
                 type="file"
                 accept=".zip"
                 disabled={isLoadingZip}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    setIsLoadingZip(true);
-                    const promise = new Promise<Uint8Array>((resolve, reject) => {
-                      try {
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                          const arrayBuffer = e.target?.result as ArrayBuffer;
-                          resolve(new Uint8Array(arrayBuffer));
-                        };
-                        reader.onerror = (e) => {
-                          minetestConsole.printErr(`Error reading zip file: ${reader.error?.message}`);
-                          reject(e);
-                        };
-                        reader.readAsArrayBuffer(file);
-                      } catch (e) {
-                        reject(e);
-                      }
-                    });
-                    setZipLoaderPromise(promise);
-                    promise.finally(() => {
-                      setIsLoadingZip(false);
-                    });
-                  }
-                }}
+                onChange={zipFileChangeHandler}
               />
               {!!zipLoaderPromise && <button
                 className="bg-blue-600 hover:bg-blue-700 text-white rounded p-1 px-3 text-sm"
@@ -450,11 +501,16 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
           {gameMode === 'local' && (
             <div className="mb-5 p-4 border border-gray-300 rounded-lg">
               <h3 className="text-xl mb-3">Normal Game Mode</h3>
-              This will run the game in normal mode, and allow you to play alone or with others on public servers.
-              <ul className="text-sm list-disc ml-4">
-                <li>You can join public servers and play with other people on them</li>
-                <li>If you want to play with your friends directly, use "Host game" or "Join game" instead</li>
-              </ul>
+
+              <div className="mb-3">
+                This will run the game in normal mode, and allow you to play alone or with others on public servers.
+                <ul className="text-sm list-disc ml-4">
+                  <li>You can join public servers and play with other people on them</li>
+                  <li>If you want to play with your friends directly, use "Host game" or "Join game" instead</li>
+                </ul>
+              </div>
+
+              {smallStartGameButton}
             </div>
           )}
 
@@ -476,12 +532,14 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
                   <li>To make sure your savegames are saved correctly, always leave the world by opening the menu with ESC and selecting "Main menu". When you're back in the main menu, open the settings menu again and click "Sync Now" or "Sync & Download"</li>
                 </ul>
               </div>
+
+              {smallStartGameButton}
             </div>
           )}
           
           {gameMode === 'join' && (
             <div className="mb-5 p-4 border border-gray-300 rounded-lg">
-              <h3 className="text-xl mb-3">Join Game Mode</h3>
+              <h3 className="text-xl mb-3">Join Game Mode (read this!)</h3>
               
               <div className="mb-3">
                 This will run the game in joining mode, and allow you to connect to a game hosted by your friend.
@@ -490,44 +548,23 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
                   <li>Choose a player name and password for your own player, and click "Start Game"</li>
                   <li>Player names and passwords are <b>per-world</b>, so you'll have to remember them per-world</li>
                   <li>Tip: Always use the same name and password, but be aware that when you join someone else's world, they might have access to that password, so don't use a sensitive one</li>
+                  <li>To leave the game, open the menu with ESC and select "Main menu". The exit screen will get stuck in "Shutting down...", hover the settings icon in the top right corner and click "Force reload" then</li>
                 </ul>
               </div>
 
               <div className="mb-3">
-                <label className="block mb-2">Join Code</label>
+                <label className="block mb-2">Join Code *</label>
                 <input 
                   type="text" 
                   className="w-full p-3 rounded-lg border-2 border-gray-300 bg-white text-black"
                   value={joinCodeString}
-                  onChange={(e) => {
-                    setJoinCodeString(e.target.value);
-                    const data = e.target.value.trim();
-                    try {
-                      const { gameId, code, proxy } = JSON.parse(data);
-                      if (!gameId || !['minetest_game', 'mineclonia', 'mineclone2', 'glitch'].includes(gameId)) {
-                        setJoinCodeError('Invalid game ID');
-                        return;
-                      }
-                      if (!code || typeof code !== 'string' || !/^[A-F0-9]{12}$/.test(code)) {
-                        setJoinCodeError('Invalid join code');
-                        return;
-                      }
-                      if (!proxy || typeof proxy !== 'number' || proxy < 0 || proxy >= PROXIES.length) {
-                        setJoinCodeError('Invalid proxy');
-                        return;
-                      }
-                      setSelectedGameId(gameId);
-                      setJoinCode(code);
-                      setJoinProxy(proxy);
-                    } catch (e) {
-                      setJoinCodeError('Join code must be JSON-parseable { gameId: string, code: string }');
-                    }
-                  }}
+                  onChange={joinCodeFieldChangeHandler}
                 />
                 {joinCodeError && <p className="text-red-500 text-sm">{joinCodeError}</p>}
               </div>
+
               <div className="mb-3">
-                <label className="block mb-2">Player Name</label>
+                <label className="block mb-2">Player Name *</label>
                 <input 
                   type="text" 
                   className="w-full p-3 rounded-lg border-2 border-gray-300 bg-white text-black"
@@ -537,6 +574,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
                   }}
                 />
               </div>
+
               <div className="mb-3">
                 <label className="block mb-2">Password</label>
                 <input 
@@ -548,6 +586,8 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
                   }}
                 />
               </div>
+
+              {smallStartGameButton}
             </div>
           )}
         </div>
