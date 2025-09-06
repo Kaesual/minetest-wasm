@@ -18,8 +18,9 @@ This repository is part of a broader effort to build a collection of Open Source
 - can easily be hosted on any path behind a reverse nginx proxy (for https support and structure)
 - can be run in iframes, since this is required for my use case
 
-My idea is that as a collective, we can build a collection of great games where the community can *focus on modifying the games*, and knowledge about the (sometimes delicate) process of *converting a game to web assembly* can be shared, too. This way, it becomes easier to add more games over time.
+My idea is that as a collective, we can build a collection of great games where the community can *focus on modifying the games*, and knowledge about the (sometimes delicate) process of *converting a game to web assembly* can be shared, too. I mainly focus on polished multiplayer games at the moment.
 
+If you want to get in touch, all details are in the [Common Games Collection Repository](https://github.com/Kaesual/common-games-collection).
 
 ## Updates in this fork
 
