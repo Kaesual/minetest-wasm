@@ -38,6 +38,9 @@ getrepo mineclonia "https://codeberg.org/mineclonia/mineclonia.git" 49251c8fbdab
 # Glitch Game
 getrepo glitch "https://codeberg.org/Wuzzy/Glitch.git" f82ce14298dd060813627eff35a4cd8b178b4e95
 
+# Block Bomber Game
+getrepo blockbomber "https://gitlab.com/blocknerd-games/blockbomber.git" b34d0a45a75071844d03ba01729e4072bc8ba3c5
+
 # These repos are part of the fork
 getrepo webshims "https://github.com/paradust7/webshims.git" 91c3fe85d2cb7f85cc8e19d3f53dc8f252a69ff7
 getrepo minetest "https://github.com/paradust7/minetest.git" 943e0e9f99245aaf61a3e3967d53f807c70492e6

@@ -160,6 +160,10 @@ function getrepo() {
     git clone "$url" "$dirname"
     pushd "$dirname"
     git checkout "$rev"
+    # Initialize and update submodules if .gitmodules exists
+    if [ -f ".gitmodules" ]; then
+      git submodule update --init --recursive
+    fi
     popd
   fi
   popd
@@ -177,6 +181,11 @@ function getrepo() {
     echo "Please pull/checkout to the correct revision, or delete repo"
     echo "before proceeding (it will be re-cloned)"
     exit 1
+  fi
+  
+  # Update submodules if .gitmodules exists (for existing repos)
+  if [ -f ".gitmodules" ]; then
+    git submodule update --init --recursive
   fi
   popd
 }

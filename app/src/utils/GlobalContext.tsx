@@ -14,6 +14,7 @@ export interface PrefetchStatus {
     voxelibre: Uint8Array | null;
     mineclonia: Uint8Array | null;
     glitch: Uint8Array | null;
+    blockbomber: Uint8Array | null;
   };
   status: {
     base: number | 'done' | 'error';
@@ -21,6 +22,7 @@ export interface PrefetchStatus {
     voxelibre: number | 'done' | 'error';
     mineclonia: number | 'done' | 'error';
     glitch: number | 'done' | 'error';
+    blockbomber: number | 'done' | 'error';
   };
 }
 
@@ -37,6 +39,7 @@ const initialPrefetchStatus: PrefetchStatus = {
     voxelibre: null,
     mineclonia: null,
     glitch: null,
+    blockbomber: null,
   },
   status: {
     base: 0,
@@ -44,6 +47,7 @@ const initialPrefetchStatus: PrefetchStatus = {
     voxelibre: 0,
     mineclonia: 0,
     glitch: 0,
+    blockbomber: 0,
   }
 };
 
@@ -107,7 +111,7 @@ export const GlobalProvider: React.FC<{children: React.ReactNode}> = ({ children
     messages
   }), [consolePrint, consolePrintErr, messages]);
     
-  const prefetch = useCallback(async (name: 'base' | 'minetest_game' | 'voxelibre' | 'mineclonia' | 'glitch') => {
+  const prefetch = useCallback(async (name: 'base' | 'minetest_game' | 'voxelibre' | 'mineclonia' | 'glitch' | 'blockbomber') => {
     const packUrl = `minetest/packs/${name}.pack`;
     try {
       console.log(`Prefetching pack: ${packUrl}`);
@@ -192,6 +196,7 @@ export const GlobalProvider: React.FC<{children: React.ReactNode}> = ({ children
     prefetch('voxelibre');
     prefetch('mineclonia');
     prefetch('glitch');
+    prefetch('blockbomber');
   }, []);
   
   // Create the instance if it doesn't exist

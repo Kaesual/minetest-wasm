@@ -182,6 +182,9 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       else if (gameOptions.gameId === 'glitch') {
         await packManager.addPack('glitch', prefetchData.result.glitch!);
       }
+      else if (gameOptions.gameId === 'blockbomber') {
+        await packManager.addPack('blockbomber', prefetchData.result.blockbomber!);
+      }
 
       // Set canvas size
       if (canvasRef.current) fixGeometry();
@@ -275,13 +278,13 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
         // NOTE: While this approach does not work, pre-warming the game cache
         // somehow could still be the right strategy to fix the issue with --go
         
-        // const withServerIndex = fullArgs.indexOf('--withserver');
-        // if (withServerIndex > -1) {
-        //   const tempArgs = ['./minetest', '--gameid', 'minetest_game', '--warm'];
+        // if (gameOptions.mode === 'join') {
+        //   const tempArgs = ['./minetest', '--gameid', minetestArgs.gameid, '--warm'];
         //   const [argc, argv] = makeArgv(tempArgs);
         //   console.log("Pre-warming game cache...");
         //   const invokeMainResult = window.emloop_invoke_main(argc, argv);
         //   console.log("Pre-warming game cache result:", invokeMainResult);
+        //   await new Promise(resolve => setTimeout(resolve, 500));
         // }
 
         minetestConsole.print("Starting: " + fullArgs.join(' '));

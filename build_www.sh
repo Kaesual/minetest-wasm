@@ -51,6 +51,9 @@ cp -p "$BUILD_DIR/mineclonia_fsroot.tar.zst" "$PACKS_DIR/mineclonia.pack"
 # Copy glitch_game pack
 cp -p "$BUILD_DIR/glitch_fsroot.tar.zst" "$PACKS_DIR/glitch.pack"
 
+# Copy blockbomber_game pack
+cp -p "$BUILD_DIR/blockbomber_fsroot.tar.zst" "$PACKS_DIR/blockbomber.pack"
+
 echo "DONE"
 
 # Optional script to customize deployment

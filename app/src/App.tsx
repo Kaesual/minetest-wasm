@@ -6,7 +6,7 @@ import './App.css';
 import MinetestArgs from './utils/MinetestArgs';
 import { PROXIES } from './utils/common';
 
-export type GameId = 'minetest_game' | 'mineclonia' | 'mineclone2' | 'glitch';
+export type GameId = 'minetest_game' | 'mineclonia' | 'mineclone2' | 'glitch' | 'blockbomber';
 
 // Define the game options interface
 export interface GameOptions {

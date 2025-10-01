@@ -230,12 +230,12 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
       }
       const [code, gameIdIndexString, proxyString] = data.split('_');
       const gameIdIndex = parseInt(gameIdIndexString);
-      if (gameIdIndex < 0 || gameIdIndex >= GAME_IDS.length) {
+      if (Number.isNaN(gameIdIndex) || typeof gameIdIndex !== 'number' || gameIdIndex < 0 || gameIdIndex >= GAME_IDS.length) {
         setJoinCodeError('Invalid game ID');
         return;
       }
       const proxyIndex = parseInt(proxyString);
-      if (!proxyIndex || typeof proxyIndex !== 'number' || proxyIndex < 0 || proxyIndex >= PROXIES.length) {
+      if (Number.isNaN(proxyIndex) || typeof proxyIndex !== 'number' || proxyIndex < 0 || proxyIndex >= PROXIES.length) {
         setJoinCodeError('Invalid proxy');
         return;
       }
@@ -438,6 +438,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
             >
               <option value="mineclone2">VoxeLibre 0.90.1 (rich minecraft-like game, recommended)</option>
               <option value="glitch">Glitch 1.3.2 (story mode game, recommended)</option>
+              <option value="blockbomber">Blockbomber 2023-12-11 (bomberman like game, recommended)</option>
               <option value="mineclonia">Mineclonia 0.116.1 (currently broken, some LUA error)</option>
               <option value="minetest_game">Minetest Game (only building, no mobs)</option>
             </select>

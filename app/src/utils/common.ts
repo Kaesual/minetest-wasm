@@ -65,6 +65,6 @@ const PROXIES: [string, string][] = [
     ["wss://ap2.dustlabs.io/mtproxy", "Australia"],
 ];
 
-const GAME_IDS: GameId[] = ['minetest_game', 'mineclonia', 'mineclone2', 'glitch'];
+const GAME_IDS: GameId[] = ['minetest_game', 'mineclonia', 'mineclone2', 'glitch', 'blockbomber'];
 
 export { SUPPORTED_LANGUAGES, PROXIES, GAME_IDS };

@@ -113,3 +113,19 @@ popd
 # Compress with ZSTD
 rm -f glitch_fsroot.tar.zst
 zstd --ultra -22 glitch_fsroot.tar
+
+# Make blockbomber_game_fsroot.tar
+mkdir -p blockbomber_fsroot/minetest/games
+pushd blockbomber_fsroot/minetest
+cp -a "$SOURCES_DIR"/blockbomber games
+cd games/blockbomber
+rm -rf ".git" ".github"
+popd
+# Make blockbomber_fsroot.tar
+rm -f blockbomber_fsroot.tar
+pushd blockbomber_fsroot
+tar cf ../blockbomber_fsroot.tar .
+popd
+# Compress with ZSTD
+rm -f blockbomber_fsroot.tar.zst
+zstd --ultra -22 blockbomber_fsroot.tar

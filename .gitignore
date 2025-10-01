@@ -15,6 +15,7 @@ sources/minetest_game
 sources/mineclonia
 sources/glitch
 sources/voxelibre
+sources/blockbomber
 emsdk/
 app/node_modules/
 app/build/
