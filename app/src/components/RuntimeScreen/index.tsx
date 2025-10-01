@@ -275,18 +275,6 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       if (window.emloop_invoke_main) {
         const fullArgs = ['./minetest', ...minetestArgs.toArray()];
 
-        // NOTE: While this approach does not work, pre-warming the game cache
-        // somehow could still be the right strategy to fix the issue with --go
-        
-        // if (gameOptions.mode === 'join') {
-        //   const tempArgs = ['./minetest', '--gameid', minetestArgs.gameid, '--warm'];
-        //   const [argc, argv] = makeArgv(tempArgs);
-        //   console.log("Pre-warming game cache...");
-        //   const invokeMainResult = window.emloop_invoke_main(argc, argv);
-        //   console.log("Pre-warming game cache result:", invokeMainResult);
-        //   await new Promise(resolve => setTimeout(resolve, 500));
-        // }
-
         minetestConsole.print("Starting: " + fullArgs.join(' '));
         const [argc, argv] = makeArgv(fullArgs);
         window.emloop_invoke_main(argc, argv);
@@ -507,6 +495,21 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
           />
         )}
       </div>
+
+      {/* Loading overlay */}
+      {isLoading && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-gray-900/90 border border-gray-700 rounded-lg p-8 max-w-md mx-4">
+            <div className="flex items-center space-x-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+              <div className="text-white">
+                <h3 className="text-lg font-semibold">Loading Game</h3>
+                <p className="text-gray-300 text-sm mt-1">Please wait while the game loads...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Canvas container */}
       <div

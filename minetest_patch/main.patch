@@ -1,0 +1,15 @@
+--- minetest/src/main.cpp	2025-10-01 13:58:03.268288754 +0200
++++ minetest/src/main.cpp	2025-10-01 13:56:32.571862143 +0200
+@@ -297,9 +297,11 @@
+ 		run_dedicated_server(game_params, cmd_args);
+ 	}
+ 
+-	if (cmd_args.getFlag("warm")) {
++	if (cmd_args.getFlag("warm") || cmd_args.getFlag("go")) {
+ 		// Create a dummy server to initialize but then delete.
+ 		// This lets us grab the media list.
++		// Auto-enable warming when using --go for direct server connection
++		std::cout << "Initializing cache warming (warm=" << cmd_args.getFlag("warm") << ", go=" << cmd_args.getFlag("go") << ")" << std::endl;
+ 		Address bind_addr(0, 0, 0, 0, 65535);
+ 		Server *server = new Server(game_params.world_path, game_params.game_spec, false, bind_addr, true);
+ 		warmup_media = server->getMedia();

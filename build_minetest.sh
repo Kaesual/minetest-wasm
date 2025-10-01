@@ -38,6 +38,7 @@ if ! $INCREMENTAL; then
       patch -p0 < "$BASE_DIR/minetest_patch/database-files.patch"
       patch -p0 < "$BASE_DIR/minetest_patch/database-sqlite3.patch"
       patch -p0 < "$BASE_DIR/minetest_patch/database-sqlite3.h.patch"
+      patch -p0 < "$BASE_DIR/minetest_patch/main.patch"
       patch -p0 < "$BASE_DIR/minetest_patch/CMakeLists.patch"
       popd
     fi
