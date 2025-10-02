@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useMinetestConsole, usePrefetchData, useStorageManager } from '../../utils/GlobalContext';
+import { useExecutePrefetch, useMinetestConsole, usePrefetchData, useStorageManager } from '../../utils/GlobalContext';
 import { type GameId, type GameOptions } from '../../App';
 import { GAME_IDS, PROXIES, SUPPORTED_LANGUAGES } from '../../utils/common';
 
@@ -38,6 +38,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
   const [joinProxyIndex, setJoinProxyIndex] = useState<number>(-1);
   const [joinCodeStringValid, setJoinCodeStringValid] = useState<boolean>(false);
   const prefetchData = usePrefetchData();
+  const executePrefetch = useExecutePrefetch();
   const minetestConsole = useMinetestConsole();
   const storageManager = useStorageManager();
 
@@ -54,12 +55,27 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
     }
   }, [currentOptions.proxy]);
 
+  useEffect(() => {
+    executePrefetch(selectedGameId);
+    if (selectedGameId === 'mineclone2') {
+      if (prefetchData.status.voxelibre !== 'done' || prefetchData.status.base !== 'done') {
+        setIsPreloading(true);
+      }
+    } else if (prefetchData.status[selectedGameId] !== 'done' || prefetchData.status.base !== 'done') {
+      setIsPreloading(true);
+    }
+  }, [selectedGameId]);
+
   // Set isPreloading to false when the prefetching is done
   useEffect(() => {
-    if (Object.values(prefetchData.status).every(status => status === 'done')) {
+    if (selectedGameId === 'mineclone2') {
+      if (prefetchData.status.voxelibre === 'done' && prefetchData.status.base === 'done') {
+        setIsPreloading(false);
+      }
+    } else if (prefetchData.status[selectedGameId] === 'done' && prefetchData.status.base === 'done') {
       setIsPreloading(false);
     }
-  }, [prefetchData.status]);
+  }, [prefetchData.status, selectedGameId]);
 
   // Initialize the storage manager
   useEffect(() => {
@@ -374,9 +390,11 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
                 'all loaded ✓ ' : 'loading '}
             </span>
             <span className="text-sm flex flex-row gap-1">
-              {Object.entries(prefetchData.status).map(([file, status]) => (
-                <div key={file} className="text-xs flex gap-1">
-                  <span>{file.split('/').pop()}</span>
+              {Object.entries(prefetchData.status)
+                .filter(([_, status]) => status !== 0)
+                .map(([name, status]) => (
+                <div key={`prefetch-${name}`} className="text-xs flex gap-1">
+                  <span>{name.split('/').pop()}</span>
                   <span>{typeof status === 'number' ? status > 100 ? `${Math.floor(status / 1000)}kB` : `${Math.floor(status * 100)}%` : status === 'done' ? '✓' : '❌'}</span>
                 </div>
               ))}

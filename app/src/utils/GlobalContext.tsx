@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { StorageManager } from './storageManager';
+import { GameId } from '../App';
 
 export interface MinetestConsole {
   print: (text: string) => void;
@@ -26,9 +27,12 @@ export interface PrefetchStatus {
   };
 }
 
+export type PackName = 'base' | 'minetest_game' | 'voxelibre' | 'mineclonia' | 'glitch' | 'blockbomber';
+
 interface GlobalContextType {
   storageManager: StorageManager | null;
   prefetch: PrefetchStatus;
+  executePrefetch: (name: GameId) => void;
   minetestConsole: MinetestConsole;
 }
 
@@ -61,6 +65,7 @@ const initialMinetestConsole: MinetestConsole = {
 const GlobalContext = createContext<GlobalContextType>({
   storageManager: null,
   prefetch: initialPrefetchStatus,
+  executePrefetch: () => {},
   minetestConsole: initialMinetestConsole
 });
 
@@ -80,6 +85,14 @@ export const usePrefetchData = () => {
   return context.prefetch;
 };
 
+export const useExecutePrefetch = () => {
+  const context = useContext(GlobalContext);
+  if (!context) {
+    throw new Error('useExecutePrefetch must be used within a GlobalProvider');
+  }
+  return context.executePrefetch;
+};
+
 export const useMinetestConsole = () => {
   const context = useContext(GlobalContext);
   if (!context) {
@@ -91,6 +104,7 @@ export const useMinetestConsole = () => {
 export const GlobalProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   // Use ref to maintain a single instance of StorageManager across renders
   const storageManagerRef = useRef<StorageManager | null>(null);
+  const calledPrefetchesRef = useRef<Set<GameId>>(new Set());
   const [prefetchStatus, setPrefetchStatus] = useState<GlobalContextType["prefetch"]>(initialPrefetchStatus);
 
   const [messages, setMessages] = useState<GlobalContextType["minetestConsole"]["messages"]>(["Console initialized"]);
@@ -111,7 +125,7 @@ export const GlobalProvider: React.FC<{children: React.ReactNode}> = ({ children
     messages
   }), [consolePrint, consolePrintErr, messages]);
     
-  const prefetch = useCallback(async (name: 'base' | 'minetest_game' | 'voxelibre' | 'mineclonia' | 'glitch' | 'blockbomber') => {
+  const prefetch = useCallback(async (name: PackName) => {
     const packUrl = `minetest/packs/${name}.pack`;
     try {
       console.log(`Prefetching pack: ${packUrl}`);
@@ -192,12 +206,19 @@ export const GlobalProvider: React.FC<{children: React.ReactNode}> = ({ children
 
   useEffect(() => {
     prefetch('base');
-    prefetch('minetest_game');
-    prefetch('voxelibre');
-    prefetch('mineclonia');
-    prefetch('glitch');
-    prefetch('blockbomber');
   }, []);
+
+  const executePrefetch = useCallback((gameId: GameId) => {
+    if (calledPrefetchesRef.current.has(gameId)) {
+      return;
+    }
+    calledPrefetchesRef.current.add(gameId);
+    if (gameId === 'mineclone2') {
+      prefetch('voxelibre');
+    } else {
+      prefetch(gameId);
+    }
+  }, [prefetch]);
   
   // Create the instance if it doesn't exist
   if (!storageManagerRef.current) {
@@ -208,6 +229,7 @@ export const GlobalProvider: React.FC<{children: React.ReactNode}> = ({ children
     <GlobalContext.Provider value={{
       storageManager: storageManagerRef.current,
       prefetch: prefetchStatus,
+      executePrefetch,
       minetestConsole
     }}>
       {children}
