@@ -63,6 +63,7 @@ const PROXIES: [string, string][] = [
     ["wss://eu1.dustlabs.io/mtproxy", "Europe"],
     ["wss://ap1.dustlabs.io/mtproxy", "Asia"],
     ["wss://ap2.dustlabs.io/mtproxy", "Australia"],
+    ["wss://minetest.ahmels.org", "Eike's Proxy"],
 ];
 
 const GAME_IDS: GameId[] = ['minetest_game', 'mineclonia', 'mineclone2', 'glitch', 'blockbomber'];
