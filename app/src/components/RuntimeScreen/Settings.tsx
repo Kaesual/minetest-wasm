@@ -241,15 +241,15 @@ export function SettingsComponent({
           <div>
             {syncInProgress ? (
               <span className="text-green-400 text-sm">
-                ⌛ Synchronizing...
+                ⌛ Synchronizing worlds...
               </span>
             ) : secondsToSync !== null ? (
               <span className="text-gray-300 text-sm">
-                ⏱️ Files changed, syncing in {secondsToSync}s
+                ⏱️ Synchronizing worlds in {secondsToSync}s
               </span>
             ) : (
               <span className="text-gray-300 text-sm">
-                ✅ Synchronized
+                ✅ Worlds synchronized
               </span>
             )}
           </div>
@@ -264,13 +264,13 @@ export function SettingsComponent({
 
           <div className="flex items-center">
             <p className="text-gray-300 text-sm">
-              Sync delay (10-300s) {Math.floor(storageManager.autoSyncDebounceDelay / 1000)}s
+              Autosync interval (30-300s) {Math.floor(storageManager.autoSyncDebounceDelay / 1000)}s
             </p>
           </div>
           <div>
             <input
               type="range"
-              min={10}
+              min={30}
               max={300}
               step={1}
               className="bg-gray-700 text-white rounded p-1 w-full"

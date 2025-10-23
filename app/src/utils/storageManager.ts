@@ -233,6 +233,8 @@ export class StorageManager {
       this.worldSyncTimeout = undefined;
     }
     this.nextWorldSyncTime = 0;
+    // Always sync the active world, if any
+    if (this.activeWorld) this.worldNamesToSync.add(this.activeWorld);
     // If no worlds to sync, sync alwaysSync files, otherwise
     // syncAlwaysSync will be called in the loop belows
     if (this.worldNamesToSync.size === 0) {
@@ -277,17 +279,17 @@ export class StorageManager {
         this.updateStorageStats();
       }
     }
+    this.worldSyncTimeout = setTimeout(this.executeWorldSync.bind(this), this.autoSyncDebounceDelay);
+    this.nextWorldSyncTime = Date.now() + this.autoSyncDebounceDelay;
     this.worldSyncInProgress = false;
   }
 
   private scheduleWorldSync(worldName: string): void {
     this.worldNamesToSync.add(worldName);
-    if (this.worldSyncInProgress || !this.autoSync) {
-      return;
+    if (this.autoSync && this.worldSyncTimeout === undefined && !this.worldSyncInProgress) {
+      this.worldSyncTimeout = setTimeout(this.executeWorldSync.bind(this), this.autoSyncDebounceDelay);
+      this.nextWorldSyncTime = Date.now() + this.autoSyncDebounceDelay;
     }
-
-    this.worldSyncTimeout = setTimeout(this.executeWorldSync.bind(this), this.autoSyncDebounceDelay);
-    this.nextWorldSyncTime = Date.now() + this.autoSyncDebounceDelay;
   }
 
   get isInitialized(): boolean | Promise<boolean> {
@@ -361,6 +363,7 @@ export class StorageManager {
         firstrun = true;
       }
       if (this.activeWorld !== worldName) {
+        if (!!this.activeWorld) this.scheduleWorldSync(this.activeWorld);
         this.activeWorld = worldName;
         this.minetestConsole?.print(`StorageManager: Active world changed to ${worldName}`);
       }
