@@ -10,7 +10,8 @@ pushd "$BUILD_DIR/openssl"
 
 patch -p1 < "$BASE_DIR"/openssl.patch
 
-export CFLAGS="-I${INSTALL_DIR}/include -DPEDANTIC"
+# Ensure OpenSSL picks up emsocket headers (without exposing installed OpenSSL headers)
+export CFLAGS="-I${SOURCES_DIR}/webshims/src/emsocket -DPEDANTIC"
 export CXXFLAGS="$CFLAGS"
 export LDFLAGS="-L${INSTALL_DIR}/lib -lemsocket"
 
