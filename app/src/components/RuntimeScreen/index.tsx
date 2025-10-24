@@ -197,7 +197,8 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
         'block_send_optimize_distance': '10',
         'client_mapblock_limit': '8000',
         'no_mtg_notification': 'true',
-        'language': gameOptions.language
+        'language': gameOptions.language,
+        'mcl_playersSleepingPercentage': '1',
       };
       if (gameOptions.mode === 'host' || gameOptions.mode === 'join') {
         conf['viewing_range'] = '90';

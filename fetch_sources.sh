@@ -31,6 +31,9 @@ getrepo minetest_game "https://github.com/minetest/minetest_game.git" a3b171e317
 
 # VoxeLibre Game
 getrepo voxelibre "https://git.minetest.land/VoxeLibre/VoxeLibre.git" 0cf15c6e2366ebb0766fcfa0a91285c6b7f6b1ed
+# Additional mods for VoxeLibre
+getrepo voxelibre/mods/protector "https://codeberg.org/tenplus1/protector.git" 56b33bb50f06aa451cef303b6ab715842894a96e
+getrepo voxelibre/mods/sethome "https://github.com/minetest-game/sethome.git" 7be372762e94105e13cc410340eaa52b41e7e85f
 
 # Mineclone Game
 getrepo mineclonia "https://codeberg.org/mineclonia/mineclonia.git" 49251c8fbdab63a115a2b8709e95732f5cdd87d3
