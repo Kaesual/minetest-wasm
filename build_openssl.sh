@@ -28,7 +28,8 @@ emconfigure ./Configure linux-generic64 \
 
 sed -i 's|^CROSS_COMPILE.*$|CROSS_COMPILE=|g' Makefile
 
-emmake make build_generated libssl.a libcrypto.a
+emmake make build_generated
+emmake make libssl.a libcrypto.a
 cp -r include/openssl "$INSTALL_DIR/include"
 cp libcrypto.a libssl.a "$INSTALL_DIR/lib"
 
