@@ -10,6 +10,7 @@ interface RuntimeScreenProps {
   gameOptions: GameOptions;
   onGameStatus: (status: 'running' | 'failed') => void;
   zipLoaderPromise: Promise<Uint8Array> | null;
+  serverExitTimestamp: Date | null;
 }
 
 declare global {
@@ -38,7 +39,7 @@ declare global {
   }
 }
 
-const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus, zipLoaderPromise }) => {
+const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus, zipLoaderPromise, serverExitTimestamp }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const [showConsole, setShowConsole] = useState(false);
@@ -493,6 +494,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
             showConsole={showConsole}
             toggleConsole={toggleConsole}
             storageManager={storageManager!}
+            serverExitTimestamp={serverExitTimestamp}
           />
         )}
       </div>

@@ -27,6 +27,7 @@ const initial_proxy = PROXIES[parseInt(localStorage.getItem('luanti_wasm_selecte
 function App() {
   const [isGameStarted, setIsGameStarted] = useState(false);
   const [zipLoaderPromise, setZipLoaderPromise] = useState<Promise<Uint8Array> | null>(null);
+  const [serverExitTimestamp, setServerExitTimestamp] = useState<Date | null>(null);
   const [gameOptions, setGameOptions] = useState<GameOptions>({
     language: 'en',
     proxy: initial_proxy[0],
@@ -47,8 +48,19 @@ function App() {
       ...options
     }));
   }, []);
+
+  const handleExitDetected = useCallback((exitCode: number) => {
+    console.log('Game exited with code:', exitCode);
+    window.location.reload();
+  }, []);
+
+  const handleServerExitIntentDetected = useCallback(() => {
+    console.log('Server exit intent detected');
+    setServerExitTimestamp(new Date());
+  }, []);
   
   const handleGameStatus = useCallback((status: 'running' | 'failed') => {
+    console.log('handleGameStatus called with status:', status);
     if (status === 'failed') {
       // If game fails to start, go back to start screen
       setIsGameStarted(false);
@@ -57,7 +69,10 @@ function App() {
 
   return (
     <div className="min-h-screen w-full bg-gray-900 text-white">
-      <GlobalProvider>
+      <GlobalProvider
+        onExitDetected={handleExitDetected}
+        onServerExitIntentDetected={handleServerExitIntentDetected}
+      >
         {!isGameStarted ? (
           <StartScreen 
             onStartGame={handleStartGame}
@@ -71,6 +86,7 @@ function App() {
             gameOptions={gameOptions}
             onGameStatus={handleGameStatus}
             zipLoaderPromise={zipLoaderPromise}
+            serverExitTimestamp={serverExitTimestamp}
           />
         )}
       </GlobalProvider>

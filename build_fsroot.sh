@@ -53,6 +53,7 @@ zstd --ultra -22 fsroot.tar
 mkdir -p minetest_game_fsroot/minetest/games
 pushd minetest_game_fsroot/minetest
 cp -a "$SOURCES_DIR"/minetest_game games
+cp -a "$SOURCES_DIR"/minetest/games/devtest games
 cd games/minetest_game
 rm -rf ".git" ".github"
 popd

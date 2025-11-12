@@ -101,20 +101,32 @@ export const useMinetestConsole = () => {
   return context.minetestConsole;
 };
 
-export const GlobalProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
+export const GlobalProvider: React.FC<{
+  children: React.ReactNode,
+  onExitDetected: (exitCode: number) => void,
+  onServerExitIntentDetected: () => void
+}> = ({ children, onExitDetected, onServerExitIntentDetected }) => {
   // Use ref to maintain a single instance of StorageManager across renders
   const storageManagerRef = useRef<StorageManager | null>(null);
   const calledPrefetchesRef = useRef<Set<GameId>>(new Set());
   const [prefetchStatus, setPrefetchStatus] = useState<GlobalContextType["prefetch"]>(initialPrefetchStatus);
 
   const [messages, setMessages] = useState<GlobalContextType["minetestConsole"]["messages"]>(["Console initialized"]);
+  const isExitMessageRegex = /^main\(\) exited with return value (\d+)$/;
+  const isServerShuttingDownMessageRegex = /.*Server shuts down. Player data is about to be saved\.$/;
 
   const consolePrint = useCallback((text: string) => {
+    if (isExitMessageRegex.test(text)) {
+      onExitDetected(parseInt(text.match(isExitMessageRegex)?.[1] || '0', 10));
+    }
     console.log(`Minetest Console: ${text}`);
     setMessages(prev => [...prev, text]);
   }, []);
 
   const consolePrintErr = useCallback((text: string) => {
+    if (isServerShuttingDownMessageRegex.test(text)) {
+      onServerExitIntentDetected();
+    }
     console.log(`Minetest Console Error: ${text}`);
     setMessages(prev => [...prev, text]);
   }, []);

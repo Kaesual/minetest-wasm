@@ -22,8 +22,4 @@ if [ -z "$IMAGE_EXISTS" ] || [ "${1:-}" = "--with-build" ]; then
   docker build -t minetest_builder .
 fi
 
-if [ ! -d emsdk ]; then
-  echo "cd /minetest-wasm && ./install_emsdk.sh" | docker run --rm -i -u $(id -u):$(id -g) -v .:/minetest-wasm:rw minetest_builder bash
-fi
-
-echo "cd /minetest-wasm && ./build_all.sh" | docker run --rm -i -u $(id -u):$(id -g) -v .:/minetest-wasm:rw minetest_builder bash
+echo "cd /minetest-wasm && ./install_emsdk.sh && ./incremental.sh" | docker run --rm -i -u $(id -u):$(id -g) -v .:/minetest-wasm:rw minetest_builder bash

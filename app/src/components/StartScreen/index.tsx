@@ -240,7 +240,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
     setJoinCodeString(e.target.value);
     let data = e.target.value.trim();
     try {
-      if (!(/^[A-F0-9]{12}_[0-9]+_[0-9]+$/.test(data))) {
+      if (!(/^[a-fA-F0-9]{12}_[0-9]+_[0-9]+$/.test(data))) {
         setJoinCodeError('Invalid join code');
         return;
       }
@@ -259,6 +259,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame, updateGameOption
       setJoinCode(code);
       setJoinProxyIndex(proxyIndex);
       setJoinCodeStringValid(true);
+      setJoinCodeError('');
     } catch (e) {
       setJoinCodeError('Join code is invalid');
       setJoinCodeStringValid(false);

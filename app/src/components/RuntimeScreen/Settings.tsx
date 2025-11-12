@@ -15,6 +15,7 @@ interface SettingsProps {
   showConsole: boolean;
   toggleConsole: () => void;
   storageManager: StorageManager;
+  serverExitTimestamp: Date | null;
 }
 
 export function SettingsComponent({
@@ -28,6 +29,7 @@ export function SettingsComponent({
   showConsole,
   toggleConsole,
   storageManager,
+  serverExitTimestamp,
 }: SettingsProps) {
   const [storageStats, setStorageStats] = useState<StorageStats>(storageManager.getStats());
   const [secondsToSync, setSecondsToSync] = useState<number | null>(null);
@@ -88,6 +90,21 @@ export function SettingsComponent({
       setSyncInProgress(false);
     }
   }, [storageManager]);
+
+  useEffect(() => {
+    if (serverExitTimestamp) {
+      let mounted = true;
+      setSecondsToSync(3);
+      setTimeout(() => {
+        if (mounted) {
+          syncNow();
+        }
+      }, 3000);
+      return () => {
+        mounted = false;
+      };
+    }
+  }, [serverExitTimestamp]);
 
   // Download all files as zip button
   const downloadAllFilesAsZip = useCallback(async () => {
