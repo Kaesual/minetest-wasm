@@ -15,7 +15,7 @@ mkdir "$ASSETS_DST_DIR"
 
 # Copy emscripten generated files
 pushd "$BUILD_DIR/minetest/src"
-EMSCRIPTEN_FILES="minetest.js minetest.wasm minetest.worker.js" # Todo: Is this correct?
+EMSCRIPTEN_FILES="minetest.js minetest.wasm"
 for I in $EMSCRIPTEN_FILES; do
   cp -p "$I" "$RELEASE_DIR"
 done
