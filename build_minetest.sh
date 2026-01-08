@@ -34,7 +34,7 @@ if ! $INCREMENTAL; then
       cp "$BASE_DIR/minetest_patch/notify_fs.cpp" "$SOURCES_DIR/minetest/src/notify_fs.cpp"
       cp "$BASE_DIR/minetest_patch/notify_fs.h" "$SOURCES_DIR/minetest/src/notify_fs.h"
       pushd "$SOURCES_DIR"
-      patch -p0 < "$BASE_DIR/minetest_patch/filesys.patch"
+      # patch -p0 < "$BASE_DIR/minetest_patch/filesys.patch"
       patch -p0 < "$BASE_DIR/minetest_patch/database-files.patch"
       patch -p0 < "$BASE_DIR/minetest_patch/database-sqlite3.patch"
       patch -p0 < "$BASE_DIR/minetest_patch/database-sqlite3.h.patch"
@@ -49,6 +49,7 @@ if ! $INCREMENTAL; then
       -DENABLE_GETTEXT=TRUE \
       -DRUN_IN_PLACE=TRUE \
       -DENABLE_GLES=TRUE \
+      -DENABLE_UPDATE_CHECKER=0 \
       -DCMAKE_BUILD_TYPE="$MINETEST_BUILD_TYPE" \
       -DZLIB_INCLUDE_DIR="$INSTALL_DIR/include" \
       -DZLIB_LIBRARY="$INSTALL_DIR/lib/libz.a" \

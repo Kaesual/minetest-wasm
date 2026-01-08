@@ -342,7 +342,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
     if (!canvasRef.current) return;
 
     const canvas = canvasRef.current;
-    const modulePath = `minetest/minetest.js`;
+    const modulePath = `minetest/luanti.js`;
 
     // Set up Module configuration for Emscripten
     window.Module = {
@@ -390,7 +390,7 @@ const RuntimeScreen: React.FC<RuntimeScreenProps> = ({ gameOptions, onGameStatus
       Module['printErr'] = (text) => {
         postMessage({cmd: 'callHandler', handler: 'printErr', args: [text], threadId: Module['_pthread_self']()});
       };
-      importScripts('minetest.js');
+      importScripts('luanti.js');
     `;
     window.Module['mainScriptUrlOrBlob'] = new Blob([workerInject], { type: "text/javascript" });
     window.Module['onFullScreen'] = () => { fixGeometry(); };

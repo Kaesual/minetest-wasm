@@ -14,8 +14,8 @@ mkdir "$PACKS_DIR"
 mkdir "$ASSETS_DST_DIR"
 
 # Copy emscripten generated files
-pushd "$BUILD_DIR/minetest/src"
-EMSCRIPTEN_FILES="minetest.js minetest.wasm minetest.worker.js" # Todo: Is this correct?
+pushd "$BUILD_DIR/minetest/bin"
+EMSCRIPTEN_FILES="luanti.js luanti.wasm"
 for I in $EMSCRIPTEN_FILES; do
   cp -p "$I" "$RELEASE_DIR"
 done
@@ -26,8 +26,8 @@ cp -a "$BASE_DIR/static/assets/." "$ASSETS_DST_DIR"
 # Ideally this would be in RELEASE_DIR, but the way this file
 # is located (see emcc --source-map-base) apparently cannot be
 # relative to the .wasm file.
-if [ -f minetest.wasm.map ]; then
-  cp minetest.wasm.map "$WWW_DIR"
+if [ -f luanti.wasm.map ]; then
+  cp luanti.wasm.map "$WWW_DIR"
 fi
 
 popd

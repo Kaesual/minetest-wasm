@@ -24,8 +24,12 @@ rm -rf bin unix
 mkdir bin
 echo "This is here to ensure bin exists" > bin/readme.txt
 
-# Copy the irrlicht shaders
-cp -r "$IRRLICHT_REPO/media/Shaders" client/shaders/Irrlicht
+mkdir -p cache
+cat > cache/common.conf << EOF
+update_last_checked = disabled
+no_mtg_notification = true
+no_keycode_migration_warning = true
+EOF
 
 popd
 

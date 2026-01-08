@@ -30,7 +30,7 @@ case $BUILD_KIND in
   debug)
     export MINETEST_BUILD_TYPE="Debug"
     export COMMON_CFLAGS="-O0 -g -gsource-map"
-    export COMMON_LDFLAGS="-sSAFE_HEAP=1 -sASSERTIONS=2 -sDEMANGLE_SUPPORT=1"
+    export COMMON_LDFLAGS="-sSAFE_HEAP=1 -sASSERTIONS=2"
     export BUILD_SUFFIX="-debug"
     ;;
   profile)
@@ -67,7 +67,6 @@ export EMSDK_SYSLIB="${EMSDK_ROOT}/upstream/emscripten/cache/sysroot/lib/wasm32-
 export EMSDK_SYSINCLUDE="${EMSDK_ROOT}/upstream/emscripten/cache/sysroot/include"
 
 export MINETEST_REPO="$SOURCES_DIR/minetest"
-export IRRLICHT_REPO="$SOURCES_DIR/minetest/lib/irrlichtmt"
 
 function getsource() {
   local url="$1"

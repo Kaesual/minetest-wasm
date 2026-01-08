@@ -27,10 +27,10 @@ getrepo freetype "https://gitlab.freedesktop.org/freetype/freetype.git" a8e4563c
 getrepo zstd "https://github.com/facebook/zstd.git" e47e674cd09583ff0503f0f6defd6d23d8b718d3
 
 # Minetest Game
-getrepo minetest_game "https://github.com/minetest/minetest_game.git" a3b171e317ec63428975915b821eb438c313adef
+getrepo minetest_game "https://github.com/minetest/minetest_game.git" 052ccb09280a1fa52022c7e120437b1e6dc82771
 
 # VoxeLibre Game
-getrepo voxelibre "https://git.minetest.land/VoxeLibre/VoxeLibre.git" 0cf15c6e2366ebb0766fcfa0a91285c6b7f6b1ed
+getrepo voxelibre "https://git.minetest.land/VoxeLibre/VoxeLibre.git" 352444f512d7f7a4c177906c37c8482ec682db9e
 # Additional mods for VoxeLibre
 getrepo voxelibre/mods/protector "https://codeberg.org/tenplus1/protector.git" 56b33bb50f06aa451cef303b6ab715842894a96e
 getrepo voxelibre/mods/sethome "https://github.com/minetest-game/sethome.git" 7be372762e94105e13cc410340eaa52b41e7e85f
@@ -45,13 +45,5 @@ getrepo glitch "https://codeberg.org/Wuzzy/Glitch.git" f82ce14298dd060813627eff3
 getrepo blockbomber "https://gitlab.com/blocknerd-games/blockbomber.git" b34d0a45a75071844d03ba01729e4072bc8ba3c5
 
 # These repos are part of the fork
-getrepo webshims "https://github.com/paradust7/webshims.git" 91c3fe85d2cb7f85cc8e19d3f53dc8f252a69ff7
-getrepo minetest "https://github.com/paradust7/minetest.git" 943e0e9f99245aaf61a3e3967d53f807c70492e6
-getrepo irrlichtmt "https://github.com/paradust7/irrlicht.git" b810648de489cf7f83d73635b7c6b83b94950a2e
-
-# Make irrlichtmt symlink
-pushd "$SOURCES_DIR"/minetest/lib
-if [ ! -e irrlichtmt ]; then
-  ln -s ../../irrlichtmt irrlichtmt
-fi
-popd
+getrepo webshims "https://github.com/paradust7/webshims.git" 0767fdedd87f61a28a34f6444b669caf563a9fd5
+getrepo minetest "https://github.com/paradust7/minetest.git" 1cfdd6d6bedbd860ab993e99db18f29db1a0c5d2

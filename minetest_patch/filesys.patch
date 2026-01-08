@@ -1,14 +1,14 @@
 --- minetest/src/filesys.cpp	2025-05-13 00:27:31.122594931 +0200
 +++ minetest/src/filesys.cpp	2025-05-12 23:38:54.980292652 +0200
-@@ -28,6 +28,7 @@
+@@ -15,6 +15,7 @@
  #include "log.h"
  #include "config.h"
  #include "porting.h"
 +#include "notify_fs.h"
- #ifndef SERVER
+ #if CHECK_CLIENT_BUILD()
  #include "irr_ptr.h"
- #endif
-@@ -100,8 +101,10 @@
+ #include <IFileArchive.h>
+@@ -112,8 +113,10 @@
  bool CreateDir(const std::string &path)
  {
  	bool r = CreateDirectory(path.c_str(), NULL);
@@ -20,7 +20,7 @@
  	if(GetLastError() == ERROR_ALREADY_EXISTS)
  		return true;
  	return false;
-@@ -145,6 +148,7 @@
+@@ -162,6 +165,7 @@
  					<< path << std::endl;
  			return false;
  		}
@@ -28,7 +28,7 @@
  		return true;
  	}
  	infostream << "RecursiveDelete: Deleting content of directory "
-@@ -164,6 +168,7 @@
+@@ -182,6 +186,7 @@
  				<< path << std::endl;
  		return false;
  	}
